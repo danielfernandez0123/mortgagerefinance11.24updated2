@@ -668,245 +668,136 @@ with tab5:
       st.header("💰 Points vs Lender Credit Analysis")
 
       st.markdown("""
-      This tool analyzes the optimal rate/cost combination by comparing different closing cost 
-  scenarios.
-      It helps determine whether to buy points (pay more upfront for lower rate) or take lender 
-  credits
-      (higher rate but lower upfront costs).
+      Enter the rates you're being offered and compare the model's predicted costs with actual 
+  lender quotes.
+      The model calculates what closing costs should be for each rate based on the optimal 
+  refinancing threshold.
       """)
 
-      # Get the base parameters
-      col1, col2, col3 = st.columns(3)
+      # Get the closing costs from the main calculator (same as used elsewhere)
+      total_closing_costs = kappa  # This uses the same kappa calculated in the main tab
 
-      with col1:
-          par_closing_costs = st.number_input(
-              "Total Closing Costs at Par ($)",
-              min_value=0,
-              max_value=50000,
-              value=5000,
-              step=500,
-              help="Total refinancing costs at the par rate (no points/credits)"
-          )
-
-      with col2:
-          par_rate = st.number_input(
-              "Par Rate (%)",
-              min_value=0.0,
-              max_value=20.0,
-              value=4.5,
-              step=0.125,
-              help="The rate with no points or lender credits"
-          ) / 100
-
-      with col3:
-          points_cost_per_point = st.number_input(
-              "Cost per Point (%)",
-              min_value=0.0,
-              max_value=2.0,
-              value=1.0,
-              step=0.25,
-              help="Percentage of loan amount per discount point"
-          ) / 100
-
-      # Additional parameters for points pricing
-      rate_change_per_point = st.number_input(
-          "Rate Change per Point (%)",
-          min_value=0.0,
-          max_value=0.5,
-          value=0.25,
-          step=0.125,
-          help="How much the rate changes per point (typically 0.25%)"
-      ) / 100
-
-      st.markdown("---")
-
-      # Table 1: Closing Costs → Optimal Rate
-      st.subheader("📊 Table 1: Optimal Rate by Closing Costs")
-      st.markdown("Shows what interest rate makes refinancing optimal at different closing cost levels")
-                  
-      # Generate closing cost range
-      cost_increments = []
-      cost = 0
-      while cost <= par_closing_costs * 4:
-          cost_increments.append(cost)
-          cost += 500
-
-      # Calculate optimal rates for each closing cost level
-      optimal_rates_by_cost = []
-
-      for closing_cost in cost_increments:
-          # Recalculate kappa with new closing cost
-          temp_kappa = closing_cost
-
-          # Calculate the optimal threshold with this closing cost
-          temp_x_star, _, _, _ = calculate_optimal_threshold(M, rho, lambda_val, sigma,
-  temp_kappa, tau)
-
-          # The optimal rate is the original rate minus the threshold
-          optimal_rate = i0 + temp_x_star  # x_star is negative
-
-          optimal_rates_by_cost.append({
-              'Closing Costs ($)': f"${closing_cost:,.0f}",
-              'Optimal Rate (%)': f"{optimal_rate * 100:.3f}%",
-              'Rate Drop Needed (bps)': f"{-temp_x_star * 10000:.0f}"
-          })
-
-      # Display as dataframe
-      df_cost_to_rate = pd.DataFrame(optimal_rates_by_cost)
-      st.dataframe(df_cost_to_rate, use_container_width=True)
-
-      # Download button for Table 1
-      csv1 = df_cost_to_rate.to_csv(index=False)
-      st.download_button(
-          label="Download Table 1 as CSV",
-          data=csv1,
-          file_name="optimal_rate_by_closing_costs.csv",
-          mime="text/csv"
-      )
-
-      st.markdown("---")
-
-      # Table 2: Rate → Closing Costs with Actual Comparison
-      st.subheader("📊 Table 2: Closing Costs by Rate (with Lender Quote Comparison)")
-      st.markdown("Compare model-implied costs with actual lender quotes to identify the best deals")
-
-      # Generate rate range (par rate ± 1.5% in 1/16 increments)
-      rate_increments = []
-      rate = par_rate - 0.015
-      while rate <= par_rate + 0.015:
-          rate_increments.append(rate)
-          rate += 0.000625  # 1/16 of 1%
-
-      # Calculate implied closing costs for each rate
-      rate_to_cost_data = []
-
-      for rate in rate_increments:
-          # Rate difference from par
-          rate_diff_from_par = rate - par_rate
-
-          # Calculate implied points/credits
-          # Negative = lender credit, Positive = points
-          points_credits = rate_diff_from_par / rate_change_per_point
-
-          # Calculate implied closing costs
-          # Higher rate = lower costs (lender credit)
-          # Lower rate = higher costs (paying points)
-          implied_closing_cost = par_closing_costs + (points_credits * M * points_cost_per_point)
-
-          rate_to_cost_data.append({
-              'Rate': rate,
-              'Rate_Display': f"{rate * 100:.4f}%",
-              'Model_Closing_Costs': implied_closing_cost,
-              'Points_Credits': -points_credits  # Negative for display (positive = credit)
-          })
-
-      # Create dataframe
-      df_rate_to_cost = pd.DataFrame(rate_to_cost_data)
-
-      # Add input fields for actual costs
-      st.markdown("### Enter Actual Lender Quotes:")
-      st.markdown("Input the actual closing costs offered by lenders for each rate to compare with model predictions")
+      # Create empty dataframe for user input
+      initial_data = pd.DataFrame({
+          'Rate (%)': [0.0] * 10,  # Start with 10 empty rows
+          'Model Closing Costs ($)': [0.0] * 10,
+          'Actual Costs ($)': [0.0] * 10,
+          'Difference ($)': [0.0] * 10
+      })
 
       # Create editable dataframe
       edited_df = st.data_editor(
-          df_rate_to_cost[['Rate_Display', 'Model_Closing_Costs']].copy(),
+          initial_data,
           column_config={
-              'Rate_Display': st.column_config.TextColumn('Rate (%)', disabled=True),
-              'Model_Closing_Costs': st.column_config.NumberColumn(
+              'Rate (%)': st.column_config.NumberColumn(
+                  'Rate (%)',
+                  help="Enter the interest rate being offered",
+                  format="%.3f",
+                  min_value=0.0,
+                  max_value=20.0,
+                  step=0.125
+              ),
+              'Model Closing Costs ($)': st.column_config.NumberColumn(
                   'Model Closing Costs ($)',
+                  help="Calculated based on optimal refinancing threshold",
                   disabled=True,
                   format="$%.0f"
               ),
-              'Actual_Costs': st.column_config.NumberColumn(
-                  'Actual Lender Costs ($)',
+              'Actual Costs ($)': st.column_config.NumberColumn(
+                  'Actual Costs ($)',
+                  help="Enter the actual closing costs quoted by lender",
                   format="$%.0f",
-                  default=0
+                  min_value=0.0
+              ),
+              'Difference ($)': st.column_config.NumberColumn(
+                  'Difference ($)',
+                  help="Model costs minus actual costs (positive = good deal)",
+                  disabled=True,
+                  format="$%.0f"
               )
           },
-          num_rows="fixed",
+          num_rows="dynamic",
           hide_index=True,
           use_container_width=True
       )
 
-      # Add actual costs column
-      edited_df['Actual_Costs'] = 0  # Initialize column
+      # Calculate model costs and differences whenever rates are entered
+      for idx in edited_df.index:
+          if edited_df.loc[idx, 'Rate (%)'] > 0:
+              # Get the entered rate
+              rate = edited_df.loc[idx, 'Rate (%)'] / 100
 
-      # Add difference column
-      if 'Actual_Costs' in edited_df.columns:
-          edited_df['Difference'] = edited_df['Model_Closing_Costs'] - edited_df['Actual_Costs']
-          edited_df['Better_Deal'] = edited_df['Difference'].apply(
-              lambda x: '✅ Better' if x > 100 else ('❌ Worse' if x < -100 else '➖ Similar')
-          )
+              # Calculate what closing costs should be for this rate
+              # Based on the rate difference from optimal threshold
+              rate_diff = i0 - rate  # How much lower this rate is than original
 
-      # Display summary statistics
-      st.markdown("### Analysis Summary:")
+              # Calculate closing costs that would make this rate optimal
+              # Using the inverse of the optimal threshold calculation
+              if rate_diff != 0:
+                  # This is the closing cost that would give this rate differential
+                  implied_kappa = abs(rate_diff) * M * (1 - tau) / (psi * (phi + lambertw(phi *
+  np.exp(-phi))))
+                  model_costs = implied_kappa
+              else:
+                  model_costs = total_closing_costs
 
-      col1, col2, col3 = st.columns(3)
+              # Update model costs
+              edited_df.loc[idx, 'Model Closing Costs ($)'] = model_costs
 
-      with col1:
-          if 'Actual_Costs' in edited_df.columns and edited_df['Actual_Costs'].sum() > 0:
-              best_deal_idx = edited_df['Difference'].idxmax()
-              best_rate = edited_df.loc[best_deal_idx, 'Rate_Display']
-              best_savings = edited_df.loc[best_deal_idx, 'Difference']
-              st.metric("Best Deal Rate", best_rate, f"${best_savings:,.0f} savings")
+              # Calculate difference if actual costs are entered
+              if edited_df.loc[idx, 'Actual Costs ($)'] > 0:
+                  difference = model_costs - edited_df.loc[idx, 'Actual Costs ($)']
+                  edited_df.loc[idx, 'Difference ($)'] = difference
 
-      with col2:
-          par_idx = edited_df.index[edited_df['Rate_Display'] == f"{par_rate * 
-  100:.4f}%"].tolist()
-          if par_idx:
-              par_difference = edited_df.loc[par_idx[0], 'Difference'] if 'Difference' in edited_df.columns else 0
-              st.metric("Par Rate Analysis", f"{par_rate * 100:.2f}%",
-  f"${par_difference:,.0f}")
+      # Display the updated dataframe with color coding
+      def highlight_difference(val):
+          """Color code the difference column"""
+          if isinstance(val, str):
+              return ''
+          if val > 0:
+              return 'color: green'
+          elif val < 0:
+              return 'color: red'
+          else:
+              return ''
 
-      with col3:
-          if 'Difference' in edited_df.columns:
-              avg_difference = edited_df['Difference'].mean()
-              st.metric("Average Model vs Actual", f"${avg_difference:,.0f}",
-                       "Model predicts higher" if avg_difference > 0 else "Lender quotes higher")
+      # Apply styling only to the difference column
+      styled_df = edited_df.style.applymap(highlight_difference, subset=['Difference ($)'])
+      st.dataframe(styled_df, use_container_width=True)
 
-      # Download button for Table 2
-      csv2 = edited_df.to_csv(index=False)
+      # Summary statistics
+      st.markdown("---")
+      st.subheader("Summary")
+
+      # Filter for rows with actual data
+      active_rows = edited_df[(edited_df['Rate (%)'] > 0) & (edited_df['Actual Costs ($)'] > 0)]
+
+      if len(active_rows) > 0:
+          col1, col2, col3 = st.columns(3)
+
+          with col1:
+              best_idx = active_rows['Difference ($)'].idxmax()
+              best_rate = active_rows.loc[best_idx, 'Rate (%)']
+              best_savings = active_rows.loc[best_idx, 'Difference ($)']
+              st.metric("Best Deal", f"{best_rate:.3f}%", f"${best_savings:,.0f}")
+
+          with col2:
+              avg_diff = active_rows['Difference ($)'].mean()
+              st.metric("Average Difference", f"${avg_diff:,.0f}")
+
+          with col3:
+              positive_deals = len(active_rows[active_rows['Difference ($)'] > 0])
+              st.metric("Good Deals", f"{positive_deals} of {len(active_rows)}")
+
+      # Download button
+      csv = edited_df.to_csv(index=False)
       st.download_button(
-          label="Download Table 2 as CSV",
-          data=csv2,
-          file_name="closing_costs_by_rate_comparison.csv",
+          label="Download Analysis as CSV",
+          data=csv,
+          file_name="rate_cost_analysis.csv",
           mime="text/csv"
       )
 
-      # Recommendation based on analysis
-      st.markdown("---")
-      st.subheader("💡 Recommendations")
-
-      if 'Difference' in edited_df.columns and edited_df['Actual_Costs'].sum() > 0:
-          best_deals = edited_df.nlargest(3, 'Difference')
-
-          st.success(f"""
-          **Based on your inputs and lender quotes:**
-
-          1. **Best Value**: {best_deals.iloc[0]['Rate_Display']} rate saves 
-  ${best_deals.iloc[0]['Difference']:,.0f} vs model
-          2. **Consider**: Rates where lender quotes are significantly below model predictions
-          3. **Avoid**: Rates where lender quotes exceed model by more than $500
-
-          **Key Insight**: The model assumes standard pricing. Better-than-model deals often 
-  indicate:
-          - Promotional pricing
-          - Relationship discounts
-          - Competitive market conditions
-          """)
-      else:
-          st.info("""
-          **To get personalized recommendations:**
-
-          1. Get rate quotes from multiple lenders
-          2. Enter the total closing costs for each rate in Table 2
-          3. The tool will identify which rate/cost combination provides the best value
-
-          **General Guidance**:
-          - **Buy points** if you'll stay in the home long-term (>5-7 years)
-          - **Take credits** if you might move/refinance soon (<3-5 years)
-          - **Go with par** if uncertain about timeline
-          """)
 
 # Footer
 st.markdown("---")
