@@ -805,8 +805,7 @@ with tab5:
 
       # Add input fields for actual costs
       st.markdown("### Enter Actual Lender Quotes:")
-      st.markdown("Input the actual closing costs offered by lenders for each rate to compare 
-  with model predictions")
+      st.markdown("Input the actual closing costs offered by lenders for each rate to compare with model predictions")
 
       # Create editable dataframe
       edited_df = st.data_editor(
