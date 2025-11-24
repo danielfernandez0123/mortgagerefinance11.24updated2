@@ -722,9 +722,8 @@ with tab5:
 
       # Table 1: Closing Costs → Optimal Rate
       st.subheader("📊 Table 1: Optimal Rate by Closing Costs")
-      st.markdown("Shows what interest rate makes refinancing optimal at different closing cost 
-  levels")
-
+      st.markdown("Shows what interest rate makes refinancing optimal at different closing cost levels")
+                  
       # Generate closing cost range
       cost_increments = []
       cost = 0
