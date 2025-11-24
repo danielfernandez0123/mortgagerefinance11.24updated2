@@ -674,9 +674,6 @@ with tab5:
   refinancing threshold.
       """)
 
-      # Get the closing costs from the main calculator (same as used elsewhere)
-      total_closing_costs = kappa  # This uses the same kappa calculated in the main tab
-
       # Create empty dataframe for user input
       initial_data = pd.DataFrame({
           'Rate (%)': [0.0] * 10,  # Start with 10 empty rows
@@ -725,21 +722,45 @@ with tab5:
       for idx in edited_df.index:
           if edited_df.loc[idx, 'Rate (%)'] > 0:
               # Get the entered rate
-              rate = edited_df.loc[idx, 'Rate (%)'] / 100
+              offered_rate = edited_df.loc[idx, 'Rate (%)'] / 100
 
-              # Calculate what closing costs should be for this rate
-              # Based on the rate difference from optimal threshold
-              rate_diff = i0 - rate  # How much lower this rate is than original
+              # Calculate the rate drop from original
+              rate_drop = i0 - offered_rate
 
-              # Calculate closing costs that would make this rate optimal
-              # Using the inverse of the optimal threshold calculation
-              if rate_diff != 0:
-                  # This is the closing cost that would give this rate differential
-                  implied_kappa = abs(rate_diff) * M * (1 - tau) / (psi * (phi + lambertw(phi *
-  np.exp(-phi))))
-                  model_costs = implied_kappa
+              # For a given rate drop to be optimal, we need to find kappa
+              # From the paper: x* = -rate_drop (negative because it's a reduction)
+              # So we need to solve for kappa given x*
+
+              if rate_drop > 0:
+                  # Convert rate drop to x* (should be negative)
+                  target_x_star = -rate_drop
+
+                  # From the optimal threshold formula, solve for kappa
+                  # x* = (1/ψ)(φ + W(φe^(-φ)))
+                  # where φ = 1 + ψ(ρ+λ)κ/(M(1-τ))
+                  # This requires solving backwards
+
+                  # Calculate what φ needs to be for this x*
+                  target_w_term = target_x_star * psi - 1
+
+                  if target_w_term > -1/np.e:  # Lambert W is defined for x >= -1/e
+                      # Calculate required φ
+                      required_phi = target_w_term - lambertw(target_w_term *
+  np.exp(-target_w_term))
+
+                      # From φ = 1 + ψ(ρ+λ)κ/(M(1-τ)), solve for κ
+                      # κ = (φ - 1) * M(1-τ) / (ψ(ρ+λ))
+                      required_kappa = (required_phi - 1) * M * (1 - tau) / (psi * (rho +
+  lambda_val))
+
+                      # Ensure non-negative
+                      model_costs = max(0, required_kappa)
+                  else:
+                      # If mathematically impossible, use a large number
+                      model_costs = 999999
               else:
-                  model_costs = total_closing_costs
+                  # If rate is higher than original, no refinancing makes sense
+                  model_costs = 0
 
               # Update model costs
               edited_df.loc[idx, 'Model Closing Costs ($)'] = model_costs
@@ -796,7 +817,6 @@ with tab5:
           data=csv,
           file_name="rate_cost_analysis.csv",
           mime="text/csv"
-      )
 
 
 # Footer
