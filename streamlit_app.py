@@ -668,156 +668,131 @@ with tab5:
       st.header("💰 Points vs Lender Credit Analysis")
 
       st.markdown("""
-      Enter the rates you're being offered and compare the model's predicted costs with actual 
-  lender quotes.
-      The model calculates what closing costs should be for each rate based on the optimal 
-  refinancing threshold.
+      This table shows what the optimal refinancing rate would be for different closing cost 
+  scenarios.
+      The optimal rate is calculated as: Original Rate - Optimal Rate Drop
       """)
 
-      # Create empty dataframe for user input
-      initial_data = pd.DataFrame({
-          'Rate (%)': [0.0] * 10,  # Start with 10 empty rows
-          'Model Closing Costs ($)': [0.0] * 10,
-          'Actual Costs ($)': [0.0] * 10,
-          'Difference ($)': [0.0] * 10
-      })
+      # Calculate the base optimal rate (at current closing costs)
+      base_optimal_rate = i0 - abs(x_star)  # x_star is negative, so we use abs()
 
-      # Create editable dataframe
-      edited_df = st.data_editor(
-          initial_data,
-          column_config={
-              'Rate (%)': st.column_config.NumberColumn(
-                  'Rate (%)',
-                  help="Enter the interest rate being offered",
-                  format="%.3f",
-                  min_value=0.0,
-                  max_value=20.0,
-                  step=0.125
-              ),
-              'Model Closing Costs ($)': st.column_config.NumberColumn(
-                  'Model Closing Costs ($)',
-                  help="Calculated based on optimal refinancing threshold",
-                  disabled=True,
-                  format="$%.0f"
-              ),
-              'Actual Costs ($)': st.column_config.NumberColumn(
-                  'Actual Costs ($)',
-                  help="Enter the actual closing costs quoted by lender",
-                  format="$%.0f",
-                  min_value=0.0
-              ),
-              'Difference ($)': st.column_config.NumberColumn(
-                  'Difference ($)',
-                  help="Model costs minus actual costs (positive = good deal)",
-                  disabled=True,
-                  format="$%.0f"
-              )
-          },
-          num_rows="dynamic",
-          hide_index=True,
-          use_container_width=True
+      st.markdown(f"""
+      **Current Parameters:**
+      - Original Mortgage Rate: {i0*100:.2f}%
+      - Current Optimal Rate Drop: {x_star_bp:.0f} basis points
+      - Current Optimal Rate (Par): {base_optimal_rate*100:.3f}%
+      - Current Closing Costs: ${kappa:,.0f}
+      """)
+
+      st.markdown("---")
+
+      # Generate closing cost range in $500 increments
+      cost_increments = []
+      cost = 0
+      max_cost = kappa * 4  # Up to 4x current closing costs
+
+      while cost <= max_cost:
+          cost_increments.append(cost)
+          cost += 500
+
+      # Calculate optimal rates for each closing cost level
+      results = []
+
+      for closing_cost in cost_increments:
+          # Calculate points as percentage of loan
+          points_percent = 0  # Start with 0% points
+          fixed_cost_temp = closing_cost - (points_percent * M)
+
+          # Ensure fixed costs are non-negative
+          if fixed_cost_temp < 0:
+              fixed_cost_temp = 0
+              points_percent = closing_cost / M
+
+          # Recalculate kappa with new closing cost
+          temp_kappa = closing_cost
+
+          # Calculate the optimal threshold with this closing cost
+          temp_x_star, _, _, _ = calculate_optimal_threshold(M, rho, lambda_val, sigma,
+  temp_kappa, tau)
+
+          # Calculate the optimal rate for this closing cost
+          optimal_rate = i0 + temp_x_star  # x_star is negative
+
+          results.append({
+              'Closing Costs ($)': closing_cost,
+              'Optimal Rate (%)': optimal_rate * 100
+          })
+
+      # Create DataFrame
+      df_results = pd.DataFrame(results)
+
+      # Display as a formatted table
+      st.dataframe(
+          df_results.style.format({
+              'Closing Costs ($)': '${:,.0f}',
+              'Optimal Rate (%)': '{:.3f}%'
+          }),
+          use_container_width=True,
+          height=600  # Make it scrollable
       )
 
-      # Calculate model costs and differences whenever rates are entered
-      for idx in edited_df.index:
-          if edited_df.loc[idx, 'Rate (%)'] > 0:
-              # Get the entered rate
-              offered_rate = edited_df.loc[idx, 'Rate (%)'] / 100
-
-              # Calculate the rate drop from original
-              rate_drop = i0 - offered_rate
-
-              # For a given rate drop to be optimal, we need to find kappa
-              # From the paper: x* = -rate_drop (negative because it's a reduction)
-              # So we need to solve for kappa given x*
-
-              if rate_drop > 0:
-                  # Convert rate drop to x* (should be negative)
-                  target_x_star = -rate_drop
-
-                  # From the optimal threshold formula, solve for kappa
-                  # x* = (1/ψ)(φ + W(φe^(-φ)))
-                  # where φ = 1 + ψ(ρ+λ)κ/(M(1-τ))
-                  # This requires solving backwards
-
-                  # Calculate what φ needs to be for this x*
-                  target_w_term = target_x_star * psi - 1
-
-                  if target_w_term > -1/np.e:  # Lambert W is defined for x >= -1/e
-                      # Calculate required φ
-                      required_phi = target_w_term - lambertw(target_w_term *
-  np.exp(-target_w_term))
-
-                      # From φ = 1 + ψ(ρ+λ)κ/(M(1-τ)), solve for κ
-                      # κ = (φ - 1) * M(1-τ) / (ψ(ρ+λ))
-                      required_kappa = (required_phi - 1) * M * (1 - tau) / (psi * (rho +
-  lambda_val))
-
-                      # Ensure non-negative
-                      model_costs = max(0, required_kappa)
-                  else:
-                      # If mathematically impossible, use a large number
-                      model_costs = 999999
-              else:
-                  # If rate is higher than original, no refinancing makes sense
-                  model_costs = 0
-
-              # Update model costs
-              edited_df.loc[idx, 'Model Closing Costs ($)'] = model_costs
-
-              # Calculate difference if actual costs are entered
-              if edited_df.loc[idx, 'Actual Costs ($)'] > 0:
-                  difference = model_costs - edited_df.loc[idx, 'Actual Costs ($)']
-                  edited_df.loc[idx, 'Difference ($)'] = difference
-
-      # Display the updated dataframe with color coding
-      def highlight_difference(val):
-          """Color code the difference column"""
-          if isinstance(val, str):
-              return ''
-          if val > 0:
-              return 'color: green'
-          elif val < 0:
-              return 'color: red'
-          else:
-              return ''
-
-      # Apply styling only to the difference column
-      styled_df = edited_df.style.applymap(highlight_difference, subset=['Difference ($)'])
-      st.dataframe(styled_df, use_container_width=True)
-
-      # Summary statistics
+      # Add some analysis
       st.markdown("---")
-      st.subheader("Summary")
+      st.subheader("Analysis")
 
-      # Filter for rows with actual data
-      active_rows = edited_df[(edited_df['Rate (%)'] > 0) & (edited_df['Actual Costs ($)'] > 0)]
+      # Find key points
+      zero_cost_rate = df_results[df_results['Closing Costs ($)'] == 0]['Optimal Rate 
+  (%)'].values[0]
+      current_cost_idx = df_results[df_results['Closing Costs ($)'] ==
+  int(kappa/500)*500].index[0] if int(kappa/500)*500 in df_results['Closing Costs ($)'].values
+  else 0
 
-      if len(active_rows) > 0:
-          col1, col2, col3 = st.columns(3)
+      col1, col2, col3 = st.columns(3)
 
-          with col1:
-              best_idx = active_rows['Difference ($)'].idxmax()
-              best_rate = active_rows.loc[best_idx, 'Rate (%)']
-              best_savings = active_rows.loc[best_idx, 'Difference ($)']
-              st.metric("Best Deal", f"{best_rate:.3f}%", f"${best_savings:,.0f}")
+      with col1:
+          st.metric(
+              "Zero Cost Rate",
+              f"{zero_cost_rate:.3f}%",
+              help="Rate needed if closing costs were $0"
+          )
 
-          with col2:
-              avg_diff = active_rows['Difference ($)'].mean()
-              st.metric("Average Difference", f"${avg_diff:,.0f}")
+      with col2:
+          st.metric(
+              "Current Cost Rate",
+              f"{base_optimal_rate*100:.3f}%",
+              help=f"Rate needed at ${kappa:,.0f} closing costs"
+          )
 
-          with col3:
-              positive_deals = len(active_rows[active_rows['Difference ($)'] > 0])
-              st.metric("Good Deals", f"{positive_deals} of {len(active_rows)}")
+      with col3:
+          rate_per_1000 = (df_results.iloc[2]['Optimal Rate (%)'] - df_results.iloc[0]['Optimal 
+  Rate (%)']) / 1000 if len(df_results) > 2 else 0
+          st.metric(
+              "Rate per $1,000",
+              f"{rate_per_1000:.3f}%",
+              help="How much rate increases per $1,000 in closing costs"
+          )
 
       # Download button
-      csv = edited_df.to_csv(index=False)
+      csv = df_results.to_csv(index=False)
       st.download_button(
-          label="Download Analysis as CSV",
+          label="Download Table as CSV",
           data=csv,
-          file_name="rate_cost_analysis.csv",
+          file_name="closing_costs_to_optimal_rate.csv",
           mime="text/csv"
       )
+
+      # Add explanation
+      st.markdown("---")
+      st.info("""
+      **How to use this table:**
+      1. Find your expected closing costs in the left column
+      2. The right column shows the rate that would trigger optimal refinancing
+      3. If market rates are below this optimal rate, consider refinancing
+      4. If market rates are above this optimal rate, wait
+      
+      **Example:** If closing costs are $5,000 and the table shows 4.500%, 
+      then you should refinance when rates drop to 4.500% or below.
+      """)
 
 
 # Footer
