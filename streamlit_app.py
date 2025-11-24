@@ -768,8 +768,7 @@ with tab5:
 
       # Table 2: Rate → Closing Costs with Actual Comparison
       st.subheader("📊 Table 2: Closing Costs by Rate (with Lender Quote Comparison)")
-      st.markdown("Compare model-implied costs with actual lender quotes to identify the best 
-  deals")
+      st.markdown("Compare model-implied costs with actual lender quotes to identify the best deals")
 
       # Generate rate range (par rate ± 1.5% in 1/16 increments)
       rate_increments = []
