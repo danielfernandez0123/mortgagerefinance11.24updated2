@@ -741,8 +741,7 @@ with tab5:
       st.subheader("Analysis")
 
       # Find key points
-      zero_cost_rate = df_results[df_results['Closing Costs ($)'] == 0]['Optimal Rate 
-  (%)'].values[0]
+      zero_cost_rate = df_results[df_results['Closing Costs ($)'] == 0]['Optimal Rate (%)'].values[0]
       current_cost_idx = df_results[df_results['Closing Costs ($)'] ==
   int(kappa/500)*500].index[0] if int(kappa/500)*500 in df_results['Closing Costs ($)'].values
   else 0
