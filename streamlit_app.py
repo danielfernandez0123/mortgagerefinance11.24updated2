@@ -817,6 +817,7 @@ with tab5:
           data=csv,
           file_name="rate_cost_analysis.csv",
           mime="text/csv"
+      )
 
 
 # Footer
