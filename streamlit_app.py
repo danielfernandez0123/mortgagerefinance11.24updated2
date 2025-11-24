@@ -853,7 +853,7 @@ with tab5:
       with col2:
           par_idx = edited_df.index[edited_df['Rate_Display'] == f"{par_rate * 
   100:.4f}%"].tolist()
-         if par_idx:
+        if par_idx:
       par_difference = edited_df.loc[par_idx[0], 'Difference'] if 'Difference' in
   edited_df.columns else 0
       st.metric("Par Rate Analysis", f"{par_rate * 100:.2f}%", f"${par_difference:,.0f}")
