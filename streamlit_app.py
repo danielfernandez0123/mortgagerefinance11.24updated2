@@ -742,9 +742,11 @@ with tab5:
 
       # Find key points
       zero_cost_rate = df_results[df_results['Closing Costs ($)'] == 0]['Optimal Rate (%)'].values[0]
-      current_cost_idx = df_results[df_results['Closing Costs ($)'] ==
-  int(kappa/500)*500].index[0] if int(kappa/500)*500 in df_results['Closing Costs ($)'].values
-  else 0
+      current_cost_idx = 0  # Default value
+      current_cost_rounded = int(kappa/500)*500
+      if current_cost_rounded in df_results['Closing Costs ($)'].values:
+          current_cost_idx = df_results[df_results['Closing Costs ($)'] ==
+  current_cost_rounded].index[0]
 
       col1, col2, col3 = st.columns(3)
 
