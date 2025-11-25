@@ -665,104 +665,153 @@ with tab4:
         3. The probability you might move before capturing full benefits
         """)
 with tab5:
-      st.header("💰 Points vs Lender Credit Analysis with Net Gain Comparison")
+      st.header("💰 Points vs Lender Credit Analysis")
 
       st.markdown("""
-      Enter your lender quotes below and select which ones to compare using the detailed cash flow model.
-      The charts will show month-by-month comparisons with full calculation details on hover.
+      This table shows what the optimal refinancing rate would be for different closing cost
+  scenarios.
+      The optimal rate is calculated as: Original Rate - Optimal Rate Drop
       """)
 
-      # Input parameters for calculations
-      st.subheader("📊 Analysis Parameters")
-      col1p, col2p, col3p, col4p = st.columns(4)
+      # Calculate the base optimal rate (at current closing costs)
+      base_optimal_rate = i0 - abs(x_star)  # x_star is negative, so we use abs()
 
-      with col1p:
-          comp_invest_rate = st.number_input(
-              "Investment Rate (%)",
-              min_value=0.0,
-              max_value=20.0,
-              value=rho*100,
-              step=0.5,
-              key="comp_invest",
-              help="Annual return on invested payment savings"
-          ) / 100
-
-      with col2p:
-          comp_new_term = st.number_input(
-              "New Loan Term (years)",
-              min_value=15,
-              max_value=30,
-              value=30,
-              step=5,
-              key="comp_term",
-              help="Term for new refinanced loans"
-          )
-
-      with col3p:
-          comp_finance_costs = st.checkbox(
-              "Finance costs in loan",
-              value=True,
-              key="comp_finance",
-              help="Roll closing costs into the new loan"
-          )
-
-      with col4p:
-          comp_include_taxes = st.checkbox(
-              "Include tax effects",
-              value=True,
-              key="comp_taxes",
-              help="Account for mortgage interest deduction"
-          )
+      st.markdown(f"""
+      **Current Parameters:**
+      - Original Mortgage Rate: {i0*100:.2f}%
+      - Current Optimal Rate Drop: {x_star_bp:.0f} basis points
+      - Current Optimal Rate (Par): {base_optimal_rate*100:.3f}%
+      - Current Closing Costs: ${kappa:,.0f}
+      """)
 
       st.markdown("---")
 
-      # Table showing optimal rates vs closing costs
-      st.subheader("📋 Optimal Rates by Closing Cost")
-
-      # Generate closing cost range
+      # Generate closing cost range in $500 increments
       cost_increments = []
       cost = 0
-      max_cost = kappa * 4
+      max_cost = kappa * 4  # Up to 4x current closing costs
 
       while cost <= max_cost:
           cost_increments.append(cost)
           cost += 500
 
-      # Calculate optimal rates
+      # Calculate optimal rates for each closing cost level
       results = []
+
       for closing_cost in cost_increments:
-          temp_x_star, _, _, _ = calculate_optimal_threshold(M, rho, lambda_val, sigma, closing_cost, tau)
-          optimal_rate = i0 - abs(temp_x_star)
+          # Calculate points as percentage of loan
+          points_percent = 0  # Start with 0% points
+          fixed_cost_temp = closing_cost - (points_percent * M)
+
+          # Ensure fixed costs are non-negative
+          if fixed_cost_temp < 0:
+              fixed_cost_temp = 0
+              points_percent = closing_cost / M
+
+          # Recalculate kappa with new closing cost
+          temp_kappa = closing_cost
+
+          # Calculate the optimal threshold with this closing cost
+          temp_x_star, _, _, _ = calculate_optimal_threshold(M, rho, lambda_val, sigma,
+  temp_kappa, tau)
+
+          # Calculate the optimal rate for this closing cost
+          optimal_rate = i0 - abs(temp_x_star)  # Subtract the rate drop
+
           results.append({
               'Closing Costs ($)': closing_cost,
               'Optimal Rate (%)': optimal_rate * 100
           })
 
+      # Create DataFrame
       df_results = pd.DataFrame(results)
 
-      # Display table
+      # Display as a formatted table
       st.dataframe(
           df_results.style.format({
               'Closing Costs ($)': '${:,.0f}',
               'Optimal Rate (%)': '{:.3f}%'
           }),
           use_container_width=True,
-          height=300
+          height=400  # Reduced height
       )
 
+      # Add some analysis
       st.markdown("---")
+      st.subheader("Analysis")
 
-      # User input section with checkboxes
+      # Find key points
+      zero_cost_rate = df_results[df_results['Closing Costs ($)'] == 0]['Optimal Rate (%)'].values[0]
+      current_cost_idx = 0  # Default value
+      current_cost_rounded = int(kappa/500)*500
+      if current_cost_rounded in df_results['Closing Costs ($)'].values:
+          current_cost_idx = df_results[df_results['Closing Costs ($)'] ==
+  current_cost_rounded].index[0]
+
+      col1, col2, col3 = st.columns(3)
+
+      with col1:
+          st.metric(
+              "Zero Cost Rate",
+              f"{zero_cost_rate:.3f}%",
+              help="Rate needed if closing costs were $0"
+          )
+
+      with col2:
+          st.metric(
+              "Current Cost Rate",
+              f"{base_optimal_rate*100:.3f}%",
+              help=f"Rate needed at ${kappa:,.0f} closing costs"
+          )
+
+      with col3:
+          rate_per_1000 = (df_results.iloc[2]['Optimal Rate (%)'] - df_results.iloc[0]['Optimal Rate (%)']) / 1000 if len(df_results) > 2 else 0
+          st.metric(
+              "Rate per $1,000",
+              f"{rate_per_1000:.3f}%",
+              help="How much rate increases per $1,000 in closing costs"
+          )
+
+      # Download button
+      csv = df_results.to_csv(index=False)
+      st.download_button(
+          label="Download Table as CSV",
+          data=csv,
+          file_name="closing_costs_to_optimal_rate.csv",
+          mime="text/csv"
+      )
+
+      # Add explanation
+      st.markdown("---")
+      st.info("""
+      **How to use this table:**
+      1. Find your expected closing costs in the left column
+      2. The right column shows the rate that would trigger optimal refinancing
+      3. If market rates are below this optimal rate, consider refinancing
+      4. If market rates are above this optimal rate, wait
+
+      **Example:** If closing costs are $5,000 and the table shows 4.500%,
+      then you should refinance when rates drop to 4.500% or below.
+      """)
+
+      # Second Table - User Input Section with comparison
+      st.markdown("---")
       st.subheader("📊 Compare Your Actual Quotes")
 
-      # Create dataframe with checkbox column
+      st.markdown("""
+      Enter your actual lender quotes below to see how they compare to the optimal rates.
+      Note: Net Benefit calculation includes tax benefits from mortgage interest deduction.
+      Select quotes to see detailed cash flow comparison below.
+      """)
+
+      # Create empty dataframe for user input
       input_data = pd.DataFrame({
-          'Select': [False] * 10,
-          'Closing Costs ($)': [0] * 10,
+          'Select': [False] * 10,  # Checkbox column
+          'Closing Costs ($)': [0] * 10,  # Start with 10 empty rows
           'Actual Rate Offered (%)': [0.0] * 10,
           'Model Optimal Rate (%)': [0.0] * 10,
           'Difference (%)': [0.0] * 10,
-          'Simple Net Benefit ($)': [0.0] * 10
+          'Net Benefit ($)': [0.0] * 10
       })
 
       # Create editable dataframe
@@ -771,7 +820,7 @@ with tab5:
           column_config={
               'Select': st.column_config.CheckboxColumn(
                   'Select',
-                  help="Check to include in comparison charts",
+                  help="Check to include in detailed comparison charts below",
                   default=False,
                   width="small"
               ),
@@ -802,8 +851,8 @@ with tab5:
                   disabled=True,
                   format="%.3f"
               ),
-              'Simple Net Benefit ($)': st.column_config.NumberColumn(
-                  'Simple Net Benefit ($)',
+              'Net Benefit ($)': st.column_config.NumberColumn(
+                  'Net Benefit ($)',
                   help="Net benefit = (-x·M·(1-τ))/(ρ+λ) - C(M)",
                   disabled=True,
                   format="$%.2f"
@@ -814,193 +863,297 @@ with tab5:
           use_container_width=True
       )
 
-      # Calculate optimal rates and simple net benefit
+      # Calculate optimal rates for entered closing costs
       for idx in edited_df.index:
           if edited_df.loc[idx, 'Closing Costs ($)'] > 0:
+              # Get the entered closing cost
               closing_cost = edited_df.loc[idx, 'Closing Costs ($)']
 
-              # Calculate optimal threshold
+              # Calculate the optimal threshold for this closing cost
               temp_x_star, _, _, _ = calculate_optimal_threshold(M, rho, lambda_val, sigma, closing_cost, tau)
+
+              # Calculate the optimal rate
               optimal_rate = i0 - abs(temp_x_star)
+
+              # Update model optimal rate
               edited_df.loc[idx, 'Model Optimal Rate (%)'] = optimal_rate * 100
 
-              # Calculate difference and net benefit if rate is entered
+              # Calculate difference if actual rate is entered
               if edited_df.loc[idx, 'Actual Rate Offered (%)'] > 0:
                   difference = edited_df.loc[idx, 'Actual Rate Offered (%)'] - (optimal_rate * 100)
                   edited_df.loc[idx, 'Difference (%)'] = difference
 
-                  # Simple net benefit
+                  # Calculate Net Benefit with tax adjustment
+                  # x is negative when the new rate is lower than the original rate
                   x = (edited_df.loc[idx, 'Actual Rate Offered (%)'] / 100) - i0
-                  net_benefit = ((-x * M * (1 - tau)) / (rho + lambda_val)) - closing_cost
-                  edited_df.loc[idx, 'Simple Net Benefit ($)'] = net_benefit
+                  C_M = closing_cost
+                  # Net benefit with tax adjustment on interest savings
+                  net_benefit = ((-x * M * (1 - tau)) / (rho + lambda_val)) - C_M
+                  edited_df.loc[idx, 'Net Benefit ($)'] = net_benefit
 
-      # Helper function for detailed calculations
-      def payment(principal, monthly_rate, n_months):
-          """Level payment on an amortizing loan."""
-          if monthly_rate == 0:
-              return principal / n_months
-          denom = 1.0 - (1.0 + monthly_rate) ** (-n_months)
-          return principal * monthly_rate / denom
+      # Display with color coding
+      def highlight_difference(val):
+          """Color code the difference column"""
+          if isinstance(val, (int, float)):
+              if val < 0:
+                  return 'background-color: lightgreen'
+              elif val > 0:
+                  return 'background-color: lightcoral'
+          return ''
 
-      def compute_scenario_history(rate, closing_costs, label):
-          """Compute full history for one refinance scenario"""
-          n_old = int(round(Gamma * 12))
-          n_new = int(round(comp_new_term * 12))
-          horizon = max(n_old, n_new)
-          gamma_month = n_old
+      def highlight_net_benefit(val):
+          """Color code the net benefit column"""
+          if isinstance(val, (int, float)):
+              if val > 0:
+                  return 'background-color: lightgreen'
+              elif val < 0:
+                  return 'background-color: lightcoral'
+          return ''
 
-          r_old = i0 / 12.0
-          r_new = rate / 12.0
-          r_inv = comp_invest_rate / 12.0
+      styled_df = edited_df.style.applymap(highlight_difference, subset=['Difference (%)']).applymap(highlight_net_benefit, subset=['Net Benefit ($)'])
+      st.dataframe(styled_df, use_container_width=True)
 
-          old_principal = M
-          if comp_finance_costs:
-              new_principal = M + closing_costs
-          else:
-              new_principal = M
+      # Summary of entered quotes
+      active_quotes = edited_df[(edited_df['Closing Costs ($)'] > 0) & (edited_df['Actual Rate Offered (%)'] > 0)]
 
-          pmt_old = payment(old_principal, r_old, n_old)
-          pmt_new = payment(new_principal, r_new, n_new)
+      if len(active_quotes) > 0:
+          st.markdown("### Quote Analysis")
+          col1, col2, col3 = st.columns(3)
 
-          bal_old = old_principal
-          bal_new = new_principal
-          inv_bal = 0.0
-          opt1_sav = 0.0
-          opt2_sav = 0.0
-          inv_bal_at_gamma = None
+          with col1:
+              best_idx = active_quotes['Difference (%)'].idxmin()
+              best_rate = active_quotes.loc[best_idx, 'Actual Rate Offered (%)']
+              best_diff = active_quotes.loc[best_idx, 'Difference (%)']
+              st.metric("Best Quote", f"{best_rate:.3f}%", f"{best_diff:+.3f}%")
 
-          history = []
+          with col2:
+              good_deals = len(active_quotes[active_quotes['Difference (%)'] < 0])
+              st.metric("Good Deals", f"{good_deals} of {len(active_quotes)}")
 
-          for t in range(1, horizon + 1):
-              # Old loan
-              if t <= n_old and bal_old > 0:
-                  interest_old = r_old * bal_old
-                  principal_old = pmt_old - interest_old
-                  bal_old = max(0.0, bal_old - principal_old)
-                  if comp_include_taxes:
-                      p_old_t = pmt_old - (interest_old * tau)
-                      p_old_t_nominal = pmt_old
-                      tax_benefit_old = interest_old * tau
-                  else:
-                      p_old_t = pmt_old
-                      p_old_t_nominal = pmt_old
-                      tax_benefit_old = 0
-              else:
-                  p_old_t = 0.0
-                  p_old_t_nominal = 0.0
-                  bal_old = 0.0
-                  interest_old = 0.0
-                  tax_benefit_old = 0.0
+          with col3:
+              avg_diff = active_quotes['Difference (%)'].mean()
+              st.metric("Avg Difference", f"{avg_diff:+.3f}%")
 
-              # New loan
-              if t <= n_new and bal_new > 0:
-                  interest_new = r_new * bal_new
-                  principal_new = pmt_new - interest_new
-                  bal_new = max(0.0, bal_new - principal_new)
-                  if comp_include_taxes:
-                      p_new_t = pmt_new - (interest_new * tau)
-                      p_new_t_nominal = pmt_new
-                      tax_benefit_new = interest_new * tau
-                  else:
-                      p_new_t = pmt_new
-                      p_new_t_nominal = pmt_new
-                      tax_benefit_new = 0
-              else:
-                  p_new_t = 0.0
-                  p_new_t_nominal = 0.0
-                  bal_new = 0.0
-                  interest_new = 0.0
-                  tax_benefit_new = 0.0
+      # Download button for comparison table
+      csv2 = edited_df.to_csv(index=False)
+      st.download_button(
+          label="Download Comparison Table as CSV",
+          data=csv2,
+          file_name="rate_comparison_analysis.csv",
+          mime="text/csv",
+          key="download_comparison"
+      )
 
-              # Payment savings
-              pmt_sav_t = p_old_t - p_new_t
-
-              # Calculate total advantage based on gamma
-              if t < gamma_month:
-                  inv_bal = inv_bal * (1.0 + r_inv) + pmt_sav_t
-                  balance_adv = bal_old - bal_new
-                  total_adv = inv_bal + balance_adv
-
-                  # Components for hover
-                  calculation_parts = {
-                      'inv_bal_prev': inv_bal - pmt_sav_t,
-                      'inv_interest': (inv_bal - pmt_sav_t) * r_inv,
-                      'pmt_sav': pmt_sav_t,
-                      'inv_bal': inv_bal,
-                      'bal_old': bal_old,
-                      'bal_new': bal_new,
-                      'balance_adv': balance_adv,
-                      'total_adv': total_adv,
-                      'formula': f"({inv_bal:.2f} + {balance_adv:.2f})"
-                  }
-
-              elif t == gamma_month:
-                  inv_bal = inv_bal * (1.0 + r_inv) + pmt_sav_t
-                  inv_bal_at_gamma = inv_bal
-                  opt2_sav = inv_bal_at_gamma
-                  opt1_sav = 0.0
-                  balance_adv = bal_old - bal_new
-                  total_adv = inv_bal + balance_adv
-
-                  calculation_parts = {
-                      'inv_bal_at_gamma': inv_bal_at_gamma,
-                      'bal_new': bal_new,
-                      'total_adv': total_adv,
-                      'formula': f"Gamma point: {inv_bal_at_gamma:.2f} + {balance_adv:.2f}"
-                  }
-
-              else:
-                  # After gamma
-                  opt1_sav_prev = opt1_sav
-                  opt1_sav = opt1_sav * (1.0 + r_inv) + pmt_old
-
-                  opt2_sav_prev = opt2_sav
-                  opt2_sav = opt2_sav * (1.0 + r_inv)
-
-                  total_adv = (opt2_sav - bal_new) - opt1_sav
-
-                  calculation_parts = {
-                      'opt1_sav_prev': opt1_sav_prev,
-                      'opt1_interest': opt1_sav_prev * r_inv,
-                      'pmt_old': pmt_old,
-                      'opt1_sav': opt1_sav,
-                      'opt2_sav_prev': opt2_sav_prev,
-                      'opt2_interest': opt2_sav_prev * r_inv,
-                      'opt2_sav': opt2_sav,
-                      'bal_new': bal_new,
-                      'total_adv': total_adv,
-                      'formula': f"({opt2_sav:.2f} - {bal_new:.2f}) - {opt1_sav:.2f}"
-                  }
-
-              rec = {
-                  "month": t,
-                  "p_old": p_old_t,
-                  "p_old_nominal": p_old_t_nominal,
-                  "p_new": p_new_t,
-                  "p_new_nominal": p_new_t_nominal,
-                  "pmt_sav_t": pmt_sav_t,
-                  "inv_bal": inv_bal if t <= gamma_month else opt2_sav,
-                  "opt1_sav": opt1_sav,
-                  "bal_old": bal_old,
-                  "bal_new": bal_new,
-                  "total_adv": total_adv,
-                  "interest_old": interest_old,
-                  "interest_new": interest_new,
-                  "tax_benefit_old": tax_benefit_old,
-                  "tax_benefit_new": tax_benefit_new,
-                  "calculation_parts": calculation_parts,
-                  "label": label
-              }
-              history.append(rec)
-
-          return history, pmt_old, pmt_new, gamma_month
+      # DETAILED CASH FLOW COMPARISON SECTION
+      st.markdown("---")
+      st.subheader("📈 Detailed Cash Flow Comparison")
 
       # Get selected rows
       selected_rows = edited_df[edited_df['Select'] & (edited_df['Closing Costs ($)'] > 0) & (edited_df['Actual Rate Offered (%)'] > 0)]
 
       if len(selected_rows) > 0:
-          st.markdown("---")
-          st.subheader("📊 Net Gain Comparison Chart")
+          # Input parameters for calculations
+          st.markdown("### Analysis Parameters")
+          col1p, col2p, col3p, col4p = st.columns(4)
+
+          with col1p:
+              comp_invest_rate = st.number_input(
+                  "Investment Rate (%)",
+                  min_value=0.0,
+                  max_value=20.0,
+                  value=rho*100,
+                  step=0.5,
+                  key="comp_invest",
+                  help="Annual return on invested payment savings"
+              ) / 100
+
+          with col2p:
+              comp_new_term = st.number_input(
+                  "New Loan Term (years)",
+                  min_value=15,
+                  max_value=30,
+                  value=30,
+                  step=5,
+                  key="comp_term",
+                  help="Term for new refinanced loans"
+              )
+
+          with col3p:
+              comp_finance_costs = st.checkbox(
+                  "Finance costs in loan",
+                  value=True,
+                  key="comp_finance",
+                  help="Roll closing costs into the new loan"
+              )
+
+          with col4p:
+              comp_include_taxes = st.checkbox(
+                  "Include tax effects",
+                  value=True,
+                  key="comp_taxes",
+                  help="Account for mortgage interest deduction"
+              )
+
+          # Helper functions
+          def payment(principal, monthly_rate, n_months):
+              """Level payment on an amortizing loan."""
+              if monthly_rate == 0:
+                  return principal / n_months
+              denom = 1.0 - (1.0 + monthly_rate) ** (-n_months)
+              return principal * monthly_rate / denom
+
+          def compute_scenario_history(rate, closing_costs, label):
+              """Compute full history for one refinance scenario"""
+              n_old = int(round(Gamma * 12))
+              n_new = int(round(comp_new_term * 12))
+              horizon = max(n_old, n_new)
+              gamma_month = n_old
+
+              r_old = i0 / 12.0
+              r_new = rate / 12.0
+              r_inv = comp_invest_rate / 12.0
+
+              old_principal = M
+              if comp_finance_costs:
+                  new_principal = M + closing_costs
+              else:
+                  new_principal = M
+
+              pmt_old = payment(old_principal, r_old, n_old)
+              pmt_new = payment(new_principal, r_new, n_new)
+
+              bal_old = old_principal
+              bal_new = new_principal
+              inv_bal = 0.0
+              opt1_sav = 0.0
+              opt2_sav = 0.0
+              inv_bal_at_gamma = None
+
+              history = []
+
+              for t in range(1, horizon + 1):
+                  # Old loan
+                  if t <= n_old and bal_old > 0:
+                      interest_old = r_old * bal_old
+                      principal_old = pmt_old - interest_old
+                      bal_old = max(0.0, bal_old - principal_old)
+                      if comp_include_taxes:
+                          p_old_t = pmt_old - (interest_old * tau)
+                          p_old_t_nominal = pmt_old
+                          tax_benefit_old = interest_old * tau
+                      else:
+                          p_old_t = pmt_old
+                          p_old_t_nominal = pmt_old
+                          tax_benefit_old = 0
+                  else:
+                      p_old_t = 0.0
+                      p_old_t_nominal = 0.0
+                      bal_old = 0.0
+                      interest_old = 0.0
+                      tax_benefit_old = 0.0
+
+                  # New loan
+                  if t <= n_new and bal_new > 0:
+                      interest_new = r_new * bal_new
+                      principal_new = pmt_new - interest_new
+                      bal_new = max(0.0, bal_new - principal_new)
+                      if comp_include_taxes:
+                          p_new_t = pmt_new - (interest_new * tau)
+                          p_new_t_nominal = pmt_new
+                          tax_benefit_new = interest_new * tau
+                      else:
+                          p_new_t = pmt_new
+                          p_new_t_nominal = pmt_new
+                          tax_benefit_new = 0
+                  else:
+                      p_new_t = 0.0
+                      p_new_t_nominal = 0.0
+                      bal_new = 0.0
+                      interest_new = 0.0
+                      tax_benefit_new = 0.0
+
+                  # Payment savings
+                  pmt_sav_t = p_old_t - p_new_t
+
+                  # Calculate total advantage based on gamma
+                  if t < gamma_month:
+                      inv_bal = inv_bal * (1.0 + r_inv) + pmt_sav_t
+                      balance_adv = bal_old - bal_new
+                      total_adv = inv_bal + balance_adv
+
+                      # Components for hover
+                      calculation_parts = {
+                          'inv_bal_prev': inv_bal - pmt_sav_t,
+                          'inv_interest': (inv_bal - pmt_sav_t) * r_inv,
+                          'pmt_sav': pmt_sav_t,
+                          'inv_bal': inv_bal,
+                          'bal_old': bal_old,
+                          'bal_new': bal_new,
+                          'balance_adv': balance_adv,
+                          'total_adv': total_adv,
+                          'formula': f"({inv_bal:.2f} + {balance_adv:.2f})"
+                      }
+
+                  elif t == gamma_month:
+                      inv_bal = inv_bal * (1.0 + r_inv) + pmt_sav_t
+                      inv_bal_at_gamma = inv_bal
+                      opt2_sav = inv_bal_at_gamma
+                      opt1_sav = 0.0
+                      balance_adv = bal_old - bal_new
+                      total_adv = inv_bal + balance_adv
+
+                      calculation_parts = {
+                          'inv_bal_at_gamma': inv_bal_at_gamma,
+                          'bal_new': bal_new,
+                          'total_adv': total_adv,
+                          'formula': f"Gamma point: {inv_bal_at_gamma:.2f} + {balance_adv:.2f}"
+                      }
+
+                  else:
+                      # After gamma
+                      opt1_sav_prev = opt1_sav
+                      opt1_sav = opt1_sav * (1.0 + r_inv) + pmt_old
+
+                      opt2_sav_prev = opt2_sav
+                      opt2_sav = opt2_sav * (1.0 + r_inv)
+
+                      total_adv = (opt2_sav - bal_new) - opt1_sav
+
+                      calculation_parts = {
+                          'opt1_sav_prev': opt1_sav_prev,
+                          'opt1_interest': opt1_sav_prev * r_inv,
+                          'pmt_old': pmt_old,
+                          'opt1_sav': opt1_sav,
+                          'opt2_sav_prev': opt2_sav_prev,
+                          'opt2_interest': opt2_sav_prev * r_inv,
+                          'opt2_sav': opt2_sav,
+                          'bal_new': bal_new,
+                          'total_adv': total_adv,
+                          'formula': f"({opt2_sav:.2f} - {bal_new:.2f}) - {opt1_sav:.2f}"
+                      }
+
+                  rec = {
+                      "month": t,
+                      "p_old": p_old_t,
+                      "p_old_nominal": p_old_t_nominal,
+                      "p_new": p_new_t,
+                      "p_new_nominal": p_new_t_nominal,
+                      "pmt_sav_t": pmt_sav_t,
+                      "inv_bal": inv_bal if t <= gamma_month else opt2_sav,
+                      "opt1_sav": opt1_sav,
+                      "bal_old": bal_old,
+                      "bal_new": bal_new,
+                      "total_adv": total_adv,
+                      "interest_old": interest_old,
+                      "interest_new": interest_new,
+                      "tax_benefit_old": tax_benefit_old,
+                      "tax_benefit_new": tax_benefit_new,
+                      "calculation_parts": calculation_parts,
+                      "label": label
+                  }
+                  history.append(rec)
+
+              return history, pmt_old, pmt_new, gamma_month
 
           # Compute histories for all selected scenarios
           all_histories = []
@@ -1015,6 +1168,7 @@ with tab5:
               all_histories.append((history, colors[idx % len(colors)], label))
 
           # Create the Net Gain chart
+          st.markdown("### Net Gain Comparison Chart")
           fig1 = go.Figure()
 
           for history, color, label in all_histories:
@@ -1099,8 +1253,7 @@ with tab5:
           st.plotly_chart(fig1, use_container_width=True)
 
           # Create component breakdown chart
-          st.markdown("---")
-          st.subheader("📊 Component Breakdown")
+          st.markdown("### Component Breakdown")
 
           # Show component charts for the first selected scenario
           first_history = all_histories[0][0]
@@ -1176,8 +1329,7 @@ with tab5:
           st.plotly_chart(fig2, use_container_width=True)
 
           # Summary statistics
-          st.markdown("---")
-          st.subheader("📊 Summary Statistics")
+          st.markdown("### Summary Statistics")
 
           summary_data = []
           for history, _, label in all_histories:
@@ -1195,8 +1347,7 @@ with tab5:
           st.dataframe(pd.DataFrame(summary_data), use_container_width=True)
 
       else:
-          st.info("Select one or more rows using the checkboxes to see the comparison charts.")
-
+          st.info("Select one or more rows using the checkboxes to see detailed cash flow comparison charts.")
 with tab6:
       st.header("📊 ENPV Analysis - Detailed Cash Flow Model")
 
