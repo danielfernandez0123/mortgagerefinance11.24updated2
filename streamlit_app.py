@@ -793,7 +793,125 @@ with tab5:
       **Example:** If closing costs are $5,000 and the table shows 4.500%, 
       then you should refinance when rates drop to 4.500% or below.
       """)
+# Second Table - User Input Section
+      st.markdown("---")
+      st.subheader("📊 Compare Your Actual Quotes")
 
+      st.markdown("""
+      Enter your actual lender quotes below to see how they compare to the optimal rates.
+      """)
+
+      # Create empty dataframe for user input
+      input_data = pd.DataFrame({
+          'Closing Costs ($)': [0] * 10,  # Start with 10 empty rows
+          'Actual Rate Offered (%)': [0.0] * 10,
+          'Model Optimal Rate (%)': [0.0] * 10,
+          'Difference (%)': [0.0] * 10
+      })
+
+      # Create editable dataframe
+      edited_df = st.data_editor(
+          input_data,
+          column_config={
+              'Closing Costs ($)': st.column_config.NumberColumn(
+                  'Closing Costs ($)',
+                  help="Enter the total closing costs quoted",
+                  format="$%.0f",
+                  min_value=0,
+                  step=500
+              ),
+              'Actual Rate Offered (%)': st.column_config.NumberColumn(
+                  'Actual Rate Offered (%)',
+                  help="Enter the rate the lender is offering",
+                  format="%.3f",
+                  min_value=0.0,
+                  max_value=20.0,
+                  step=0.125
+              ),
+              'Model Optimal Rate (%)': st.column_config.NumberColumn(
+                  'Model Optimal Rate (%)',
+                  help="The optimal rate calculated by the model",
+                  disabled=True,
+                  format="%.3f"
+              ),
+              'Difference (%)': st.column_config.NumberColumn(
+                  'Difference (%)',
+                  help="Actual minus Optimal (negative = good deal)",
+                  disabled=True,
+                  format="%.3f"
+              )
+          },
+          num_rows="dynamic",
+          hide_index=True,
+          use_container_width=True
+      )
+
+      # Calculate optimal rates for entered closing costs
+      for idx in edited_df.index:
+          if edited_df.loc[idx, 'Closing Costs ($)'] > 0:
+              # Get the entered closing cost
+              closing_cost = edited_df.loc[idx, 'Closing Costs ($)']
+
+              # Calculate the optimal threshold for this closing cost
+              temp_x_star, _, _, _ = calculate_optimal_threshold(M, rho, lambda_val, sigma,
+  closing_cost, tau)
+
+              # Calculate the optimal rate
+              optimal_rate = i0 - abs(temp_x_star)
+
+              # Update model optimal rate
+              edited_df.loc[idx, 'Model Optimal Rate (%)'] = optimal_rate * 100
+
+              # Calculate difference if actual rate is entered
+              if edited_df.loc[idx, 'Actual Rate Offered (%)'] > 0:
+                  difference = edited_df.loc[idx, 'Actual Rate Offered (%)'] - (optimal_rate *
+  100)
+                  edited_df.loc[idx, 'Difference (%)'] = difference
+
+      # Display with color coding
+      def highlight_difference(val):
+          """Color code the difference column"""
+          if isinstance(val, (int, float)):
+              if val < 0:
+                  return 'background-color: lightgreen'
+              elif val > 0:
+                  return 'background-color: lightcoral'
+          return ''
+
+      styled_df = edited_df.style.applymap(highlight_difference, subset=['Difference (%)'])
+      st.dataframe(styled_df, use_container_width=True)
+
+      # Summary of entered quotes
+      active_quotes = edited_df[(edited_df['Closing Costs ($)'] > 0) & (edited_df['Actual Rate 
+  Offered (%)'] > 0)]
+
+      if len(active_quotes) > 0:
+          st.markdown("### Quote Analysis")
+          col1, col2, col3 = st.columns(3)
+
+          with col1:
+              best_idx = active_quotes['Difference (%)'].idxmin()
+              best_rate = active_quotes.loc[best_idx, 'Actual Rate Offered (%)']
+              best_diff = active_quotes.loc[best_idx, 'Difference (%)']
+              st.metric("Best Quote", f"{best_rate:.3f}%", f"{best_diff:+.3f}%")
+
+          with col2:
+              good_deals = len(active_quotes[active_quotes['Difference (%)'] < 0])
+              st.metric("Good Deals", f"{good_deals} of {len(active_quotes)}")
+
+          with col3:
+              avg_diff = active_quotes['Difference (%)'].mean()
+              st.metric("Avg Difference", f"{avg_diff:+.3f}%")
+
+      # Download button for comparison table
+      csv2 = edited_df.to_csv(index=False)
+      st.download_button(
+          label="Download Comparison Table as CSV",
+          data=csv2,
+          file_name="rate_comparison_analysis.csv",
+          mime="text/csv",
+          key="download_comparison"  # Unique key to avoid conflict with first download button
+      )
 
 # Footer
 st.markdown("---")
