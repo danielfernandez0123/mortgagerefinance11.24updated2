@@ -1087,11 +1087,17 @@ with tab5:
                           principal_new = 0.0
                           tax_benefit_new = 0.0
 
-                      # Payment savings
-                      pmt_sav_t = p_old_t - p_new_t
+                                            # Payment savings (calculate initial savings amount)
+                      if t == 1:
+                          initial_pmt_sav = pmt_old - pmt_new  # Store the initial payment difference
+                          if comp_include_taxes:
+                              # Adjust for taxes
+                              initial_interest_old = r_old * M
+                              initial_interest_new = r_new * (M + closing_costs if comp_finance_costs else M)
+                              initial_pmt_sav = (pmt_old - initial_interest_old * tau) - (pmt_new - initial_interest_new * tau)
 
-                      # Option 2 savings accumulation (throughout entire period)
-                      opt2_sav = opt2_sav * (1.0 + r_inv) + pmt_sav_t
+                      # Option 2 savings accumulation (use constant initial payment savings throughout)
+                      opt2_sav = opt2_sav * (1.0 + r_inv) + initial_pmt_sav
 
                       # Option 1 savings (starts at gamma)
                       if t > gamma_month:
