@@ -765,8 +765,7 @@ with tab5:
           )
 
       with col3:
-          rate_per_1000 = (df_results.iloc[2]['Optimal Rate (%)'] - df_results.iloc[0]['Optimal 
-  Rate (%)']) / 1000 if len(df_results) > 2 else 0
+          rate_per_1000 = (df_results.iloc[2]['Optimal Rate (%)'] - df_results.iloc[0]['Optimal Rate (%)']) / 1000 if len(df_results) > 2 else 0
           st.metric(
               "Rate per $1,000",
               f"{rate_per_1000:.3f}%",
