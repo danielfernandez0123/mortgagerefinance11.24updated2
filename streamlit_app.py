@@ -869,13 +869,13 @@ with tab5:
 
       # Display with color coding
           def highlight_difference(val):
-          """Color code the difference column"""
-          if isinstance(val, (int, float)):
-              if val < 0:
-                  return 'background-color: lightgreen'
-              elif val > 0:
-                  return 'background-color: lightcoral'
-          return ''
+              """Color code the difference column"""
+              if isinstance(val, (int, float)):
+                  if val < 0:
+                      return 'background-color: lightgreen'
+                  elif val > 0:
+                      return 'background-color: lightcoral'
+              return ''
 
       styled_df = edited_df.style.applymap(highlight_difference, subset=['Difference (%)'])
       st.dataframe(styled_df, use_container_width=True)
