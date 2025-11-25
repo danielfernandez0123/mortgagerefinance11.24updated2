@@ -892,7 +892,7 @@ with tab5:
 
             return styles
 
-        styled_df = edited_df.style.apply(highlight_cells, axis=1)
+    styled_df = edited_df.style.apply(highlight_cells, axis=1)
         st.dataframe(styled_df, use_container_width=True)
 
       # Summary of entered quotes
