@@ -668,7 +668,7 @@ with tab5:
       st.header("💰 Points vs Lender Credit Analysis")
 
       st.markdown("""
-      This table shows what the optimal refinancing rate would be for different closing cost 
+      This table shows what the optimal refinancing rate would be for different closing cost
   scenarios.
       The optimal rate is calculated as: Original Rate - Optimal Rate Drop
       """)
@@ -789,8 +789,8 @@ with tab5:
       2. The right column shows the rate that would trigger optimal refinancing
       3. If market rates are below this optimal rate, consider refinancing
       4. If market rates are above this optimal rate, wait
-      
-      **Example:** If closing costs are $5,000 and the table shows 4.500%, 
+
+      **Example:** If closing costs are $5,000 and the table shows 4.500%,
       then you should refinance when rates drop to 4.500% or below.
       """)
 # Second Table - User Input Section
@@ -847,7 +847,6 @@ with tab5:
                   disabled=True,
                   format="$%.2f"
               )
-
           },
           num_rows="dynamic",
           hide_index=True,
@@ -871,33 +870,36 @@ with tab5:
 
               # Calculate difference if actual rate is entered
               if edited_df.loc[idx, 'Actual Rate Offered (%)'] > 0:
-            # Calculate Net Benefit
-                    x = -(edited_df.loc[idx, 'Actual Rate Offered (%)'] / 100 - i0)
-                    C_M = closing_cost
-                    net_benefit = rho + lambda_val - x * M - C_M
-                    edited_df.loc[idx, 'Net Benefit ($)'] = net_benefit
+                  difference = edited_df.loc[idx, 'Actual Rate Offered (%)'] - (optimal_rate * 100)
+                  edited_df.loc[idx, 'Difference (%)'] = difference
+
+                  # Calculate Net Benefit
+                  x = -(edited_df.loc[idx, 'Actual Rate Offered (%)'] / 100 - i0)
+                  C_M = closing_cost
+                  net_benefit = rho + lambda_val - x * M - C_M
+                  edited_df.loc[idx, 'Net Benefit ($)'] = net_benefit
 
       # Display with color coding
-          def highlight_difference(val):
-            """Color code the difference column"""
-            if isinstance(val, (int, float)):
-                if val < 0:
-                    return 'background-color: lightgreen'
-                elif val > 0:
-                    return 'background-color: lightcoral'
-            return ''
-            def highlight_net_benefit(val):
-            """Color code the net benefit column"""
-            if isinstance(val, (int, float)):
-                if val > 0:
-                    return 'background-color: lightgreen'
-                elif val < 0:
-                    return 'background-color: lightcoral'
-            return ''
+      def highlight_difference(val):
+          """Color code the difference column"""
+          if isinstance(val, (int, float)):
+              if val < 0:
+                  return 'background-color: lightgreen'
+              elif val > 0:
+                  return 'background-color: lightcoral'
+          return ''
 
-        styled_df = edited_df.style.applymap(highlight_difference, subset=['Difference (%)']).applymap(highlight_net_benefit, subset=['Net Benefit ($)'])
+      def highlight_net_benefit(val):
+          """Color code the net benefit column"""
+          if isinstance(val, (int, float)):
+              if val > 0:
+                  return 'background-color: lightgreen'
+              elif val < 0:
+                  return 'background-color: lightcoral'
+          return ''
+
+      styled_df = edited_df.style.applymap(highlight_difference, subset=['Difference (%)']).applymap(highlight_net_benefit, subset=['Net Benefit ($)'])
       st.dataframe(styled_df, use_container_width=True)
-
 
       # Summary of entered quotes
       active_quotes = edited_df[(edited_df['Closing Costs ($)'] > 0) & (edited_df['Actual Rate Offered (%)'] > 0)]
@@ -929,6 +931,7 @@ with tab5:
           mime="text/csv",
           key="download_comparison"  # Unique key to avoid conflict with first download button
       )
+
 
 # Footer
 st.markdown("---")
