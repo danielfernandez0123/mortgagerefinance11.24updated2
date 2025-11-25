@@ -686,6 +686,42 @@ with tab5:
 
       st.markdown("---")
 
+      # Add inputs for ENPV calculation
+      st.subheader("📊 ENPV Calculation Parameters")
+      col1, col2, col3 = st.columns(3)
+
+      with col1:
+          enpv_invest_rate = st.number_input(
+              "Investment Rate (%) for ENPV",
+              min_value=0.0,
+              max_value=20.0,
+              value=rho*100,  # Default to discount rate
+              step=0.5,
+              help="Annual return rate for invested payment savings"
+          ) / 100
+
+      with col2:
+          enpv_cpr = st.number_input(
+              "CPR (%) for ENPV",
+              min_value=0.0,
+              max_value=100.0,
+              value=mu*100,  # Default to moving probability
+              step=1.0,
+              help="Conditional Prepayment Rate (annual)"
+          ) / 100
+
+      with col3:
+          enpv_new_term = st.number_input(
+              "New Loan Term (years)",
+              min_value=15,
+              max_value=30,
+              value=30,
+              step=5,
+              help="Term for the new refinanced loan"
+          )
+
+      st.markdown("---")
+
       # Generate closing cost range in $500 increments
       cost_increments = []
       cost = 0
@@ -733,7 +769,7 @@ with tab5:
               'Optimal Rate (%)': '{:.3f}%'
           }),
           use_container_width=True,
-          height=600  # Make it scrollable
+          height=400  # Reduced height
       )
 
       # Add some analysis
@@ -802,12 +838,13 @@ with tab5:
           denom = 1.0 - (1.0 + monthly_rate) ** (-n_months)
           return principal * monthly_rate / denom
 
-      def calculate_enpv_benefit(current_balance, current_rate, new_rate, remaining_years, new_term_years,
-                                closing_costs, invest_rate, discount_rate, cpr, finance_costs_in_loan=True):
-          """Calculate ENPV benefit using the imp file methodology"""
+      def calculate_enpv_benefit_with_gamma(current_balance, current_rate, new_rate, remaining_years, new_term_years,
+                                          closing_costs, invest_rate, discount_rate, cpr, tau_rate, finance_costs_in_loan=True):
+          """Calculate ENPV benefit using the imp file methodology with post-gamma logic"""
           n_old = int(round(remaining_years * 12))
           n_new = int(round(new_term_years * 12))
           horizon = max(n_old, n_new)
+          gamma_month = n_old  # When old loan would have been paid off
 
           r_old = current_rate / 12.0
           r_new = new_rate / 12.0
@@ -817,7 +854,7 @@ with tab5:
           old_principal = current_balance
           new_principal = current_balance + closing_costs if finance_costs_in_loan else current_balance
 
-          # Monthly payments
+          # Monthly payments (adjusted for tax benefit on interest)
           pmt_old = payment(old_principal, r_old, n_old)
           pmt_new = payment(new_principal, r_new, n_new)
 
@@ -825,7 +862,13 @@ with tab5:
           bal_new = new_principal
           inv_bal = 0.0
 
-          net_gain_pv = []
+          net_gain_pv_list = []
+
+          # Option 1 savings (no-refi) – starts at 0 and only begins after gamma
+          opt1_sav = 0.0
+          # Option 2 savings after gamma
+          opt2_sav = 0.0
+          inv_bal_at_gamma = None
 
           # Build cash flows
           for t in range(1, horizon + 1):
@@ -834,42 +877,76 @@ with tab5:
                   interest_old = r_old * bal_old
                   principal_old = pmt_old - interest_old
                   bal_old = max(0.0, bal_old - principal_old)
-                  p_old_t = pmt_old
+                  # After-tax payment considering mortgage interest deduction
+                  p_old_t = pmt_old - (interest_old * tau_rate)
               else:
                   p_old_t = 0.0
                   bal_old = 0.0
+                  interest_old = 0.0
 
               # New loan
               if t <= n_new and bal_new > 0:
                   interest_new = r_new * bal_new
                   principal_new = pmt_new - interest_new
                   bal_new = max(0.0, bal_new - principal_new)
-                  p_new_t = pmt_new
+                  # After-tax payment considering mortgage interest deduction
+                  p_new_t = pmt_new - (interest_new * tau_rate)
               else:
                   p_new_t = 0.0
                   bal_new = 0.0
+                  interest_new = 0.0
 
-              # Payment savings and investment
+              # Payment savings (after-tax basis)
               pmt_sav_t = p_old_t - p_new_t
-              inv_bal = inv_bal * (1.0 + r_inv) + pmt_sav_t
 
-              # Total advantage and present value
-              balance_adv = bal_old - bal_new
-              total_adv = inv_bal + balance_adv
+              if t < gamma_month:
+                  # BEFORE gamma: use original logic
+                  inv_bal = inv_bal * (1.0 + r_inv) + pmt_sav_t
+                  balance_adv = bal_old - bal_new
+                  total_adv = inv_bal + balance_adv
+
+              elif t == gamma_month:
+                  # AT gamma: take snapshot
+                  inv_bal = inv_bal * (1.0 + r_inv) + pmt_sav_t
+                  inv_bal_at_gamma = inv_bal
+                  opt2_sav = inv_bal_at_gamma
+                  opt1_sav = 0.0
+                  balance_adv = bal_old - bal_new
+                  total_adv = inv_bal + balance_adv
+
+              else:
+                  # AFTER gamma: use new logic from imp file
+                  # Option 1 (no refi): you now have a free payment equal to pmt_old
+                  opt1_sav = opt1_sav * (1.0 + r_inv) + pmt_old
+
+                  # Option 2 savings: no more contributions, just compounding
+                  opt2_sav = opt2_sav * (1.0 + r_inv)
+
+                  # Net gain = (Option 2 savings - refi balance) - Option 1 savings
+                  total_adv = (opt2_sav - bal_new) - opt1_sav
 
               # Present value
               pv_factor = 1.0 / ((1.0 + r_disc) ** t)
-              net_gain_pv.append(total_adv * pv_factor)
+              net_gain_pv_list.append(total_adv * pv_factor)
 
           # Calculate ENPV with mortality
           SMM = 1 - (1 - cpr)**(1/12)
           survival = 1.0
           enpv = 0.0
 
-          for t in range(min(360, len(net_gain_pv))):
+          # Pad net_gain_pv_list to 360 months if needed
+          last_val = net_gain_pv_list[-1] if len(net_gain_pv_list) > 0 else 0.0
+          while len(net_gain_pv_list) < 360:
+              net_gain_pv_list.append(last_val)
+
+          for t in range(360):
               mortality_t = survival * SMM
-              enpv += net_gain_pv[t] * mortality_t
+              enpv += net_gain_pv_list[t] * mortality_t
               survival = survival * (1 - SMM)
+
+          # Add any remaining survival probability to month 360
+          if survival > 0.001:  # If significant survival remains
+              enpv += net_gain_pv_list[-1] * survival
 
           return enpv
 
@@ -879,6 +956,7 @@ with tab5:
 
       st.markdown("""
       Enter your actual lender quotes below to see how they compare to the optimal rates.
+      Note: Both Net Benefit and ENPV calculations now include tax benefits from mortgage interest deduction.
       """)
 
       # Create empty dataframe for user input
@@ -924,13 +1002,13 @@ with tab5:
               ),
               'Net Benefit ($)': st.column_config.NumberColumn(
                   'Net Benefit ($)',
-                  help="Net benefit = (-x·M)/(ρ+λ) - C(M)",
+                  help="Net benefit = (-x·M·(1-τ))/(ρ+λ) - C(M)",
                   disabled=True,
                   format="$%.2f"
               ),
               'ENPV Benefit ($)': st.column_config.NumberColumn(
                   'ENPV Benefit ($)',
-                  help="Expected NPV using detailed cash flow model with prepayment",
+                  help="Expected NPV using detailed cash flow model with prepayment and taxes",
                   disabled=True,
                   format="$%.2f"
               )
@@ -960,31 +1038,26 @@ with tab5:
                   difference = edited_df.loc[idx, 'Actual Rate Offered (%)'] - (optimal_rate * 100)
                   edited_df.loc[idx, 'Difference (%)'] = difference
 
-                  # Calculate Net Benefit using the corrected formula
+                  # Calculate Net Benefit with tax adjustment
                   # x is negative when the new rate is lower than the original rate
                   x = (edited_df.loc[idx, 'Actual Rate Offered (%)'] / 100) - i0
                   C_M = closing_cost
-                  # net_benefit = ((-x * M) / (rho + lambda_val)) - C_M
-                  net_benefit = ((-x * M) / (rho + lambda_val)) - C_M
+                  # Net benefit with tax adjustment on interest savings
+                  net_benefit = ((-x * M * (1 - tau)) / (rho + lambda_val)) - C_M
                   edited_df.loc[idx, 'Net Benefit ($)'] = net_benefit
 
-                  # Calculate ENPV Benefit
-                  # Use mu (probability of moving) as CPR, not the full lambda
-                  cpr_for_calc = mu  # Just the moving probability
-                  # If points were specified in closing costs, extract them
-                  points_amount = points * M  # Use the sidebar points value
-                  fixed_fees = closing_cost - points_amount
-
-                  enpv_benefit = calculate_enpv_benefit(
+                  # Calculate ENPV Benefit with gamma logic
+                  enpv_benefit = calculate_enpv_benefit_with_gamma(
                       current_balance=M,
                       current_rate=i0,
                       new_rate=edited_df.loc[idx, 'Actual Rate Offered (%)'] / 100,
                       remaining_years=Gamma,
-                      new_term_years=30,  # Assuming 30-year refi
+                      new_term_years=enpv_new_term,
                       closing_costs=closing_cost,
-                      invest_rate=rho,  # Using discount rate as investment rate
+                      invest_rate=enpv_invest_rate,
                       discount_rate=rho,
-                      cpr=cpr_for_calc,
+                      cpr=enpv_cpr,
+                      tau_rate=tau,
                       finance_costs_in_loan=True
                   )
                   edited_df.loc[idx, 'ENPV Benefit ($)'] = enpv_benefit
@@ -1032,7 +1105,7 @@ with tab5:
               # Calculate all components
               x = actual_rate - i0  # x is negative when offered rate < original rate
               C_M = closing_cost
-              net_benefit = ((-x * M) / (rho + lambda_val)) - C_M
+              net_benefit = ((-x * M * (1 - tau)) / (rho + lambda_val)) - C_M
               enpv_benefit = edited_df.loc[idx, 'ENPV Benefit ($)']
 
               st.markdown(f"**Row {row_num} Calculation:**")
@@ -1043,16 +1116,20 @@ with tab5:
                   st.markdown(f"""
                   <div style='background-color: #f0f2f6; padding: 15px; border-radius: 5px; font-family: monospace;'>
                   <b>Simple Net Benefit Formula:</b><br>
-                  Net Benefit = (-x·M)/(ρ+λ) - C(M)<br><br>
+                  Net Benefit = (-x·M·(1-τ))/(ρ+λ) - C(M)<br><br>
 
                   Where:<br>
                   - ρ = {rho:.4f} ({rho*100:.1f}%)<br>
                   - λ = {lambda_val:.4f}<br>
+                  - τ = {tau:.2f} ({tau*100:.0f}% tax rate)<br>
                   - x = {actual_rate:.4f} - {i0:.4f} = {x:.4f}<br>
                   - M = ${M:,.0f}<br>
                   - C(M) = ${C_M:,.0f}<br><br>
 
-                  Result: <b>${net_benefit:,.2f}</b>
+                  Calculation:<br>
+                  = (-{x:.4f} × ${M:,.0f} × {1-tau:.2f}) / {rho + lambda_val:.4f} - ${C_M:,.0f}<br>
+                  = ${(-x * M * (1-tau))/(rho + lambda_val):,.2f} - ${C_M:,.0f}<br>
+                  = <b>${net_benefit:,.2f}</b>
                   </div>
                   """, unsafe_allow_html=True)
 
@@ -1062,12 +1139,14 @@ with tab5:
                   <b>ENPV (Detailed Model):</b><br>
                   Uses actual cash flows with:<br><br>
 
-                  - CPR = {mu*100:.1f}% (moving prob)<br>
+                  - CPR = {enpv_cpr*100:.1f}%<br>
                   - Old rate = {i0*100:.2f}%<br>
                   - New rate = {actual_rate*100:.2f}%<br>
                   - Remaining term = {Gamma} years<br>
-                  - New term = 30 years<br>
-                  - Investment rate = {rho*100:.1f}%<br><br>
+                  - New term = {enpv_new_term} years<br>
+                  - Investment rate = {enpv_invest_rate*100:.1f}%<br>
+                  - Tax rate = {tau*100:.0f}%<br>
+                  - Post-Γ logic: Yes<br><br>
 
                   Result: <b>${enpv_benefit:,.2f}</b>
                   </div>
@@ -1112,7 +1191,6 @@ with tab5:
           mime="text/csv",
           key="download_comparison"  # Unique key to avoid conflict with first download button
       )
-
 
 # Footer
 st.markdown("---")
