@@ -868,7 +868,7 @@ with tab5:
                   edited_df.loc[idx, 'Difference (%)'] = difference
 
       # Display with color coding
-       def highlight_difference(val):
+          def highlight_difference(val):
           """Color code the difference column"""
           if isinstance(val, (int, float)):
               if val < 0:
