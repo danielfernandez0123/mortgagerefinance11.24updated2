@@ -1914,19 +1914,6 @@ with tab7:
         )
 
     with col4:
-        par_cost = st.number_input(
-            "Cost at Par Rate ($)",
-            min_value=-10000,
-            max_value=10000,
-            value=1000,
-            step=100,
-            help="The cost for the par rate"
-        )
-
-    # Add tax rate to second row
-    col1b, col2b, col3b, col4b = st.columns(4)
-
-    with col1b:
         points_tax_rate = st.number_input(
             "Marginal Tax Rate (%)",
             min_value=0.0,
@@ -1935,6 +1922,19 @@ with tab7:
             step=1.0,
             help="Your marginal tax rate"
         ) / 100
+
+    # Second row with Cost at Par
+    col1b, col2b, col3b, col4b = st.columns(4)
+
+    with col1b:
+        par_cost = st.number_input(
+            "Cost at Par Rate ($)",
+            min_value=-10000,
+            max_value=10000,
+            value=1000,
+            step=100,
+            help="The cost for the par rate"
+        )
 
     st.subheader("🔧 Economic Parameters")
 
@@ -1990,17 +1990,15 @@ with tab7:
     Enter different rate/cost combinations below. The "Cost Above Par" is automatically calculated.
     """)
 
-    # Create input table with more rows and actual cost
+    # Create input table with Actual Cost and Cost Above Par
     scenarios_data = pd.DataFrame({
         'Rate (%)': [points_par_rate * 100, 5.75, 5.50, 5.25, 6.25, 6.50, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
-        'Actual Cost ($)': [par_cost, 5000, 9000, 13000, -3000, -7000, 0, 0, 0, 0, 0, 0]
+        'Actual Cost ($)': [par_cost, 5000, 9000, 13000, -3000, -7000, 0, 0, 0, 0, 0, 0],
+        'Cost Above Par ($)': [0, 4000, 8000, 12000, -4000, -8000, 0, 0, 0, 0, 0, 0]
     })
 
-    # Add Cost Above Par as calculated column
-    scenarios_data['Cost Above Par ($)'] = scenarios_data['Actual Cost ($)'] - par_cost
-
     edited_scenarios = st.data_editor(
-        scenarios_data[['Rate (%)', 'Actual Cost ($)']],  # Only show editable columns
+        scenarios_data,
         column_config={
             'Rate (%)': st.column_config.NumberColumn(
                 'Rate (%)',
@@ -2015,6 +2013,13 @@ with tab7:
                 help="Total cost for this rate",
                 format="$%.0f",
                 step=100
+            ),
+            'Cost Above Par ($)': st.column_config.NumberColumn(
+                'Cost Above Par ($)',
+                help="Cost relative to par rate",
+                format="$%.0f",
+                step=100,
+                disabled=True  # Make this read-only since it's calculated
             )
         },
         num_rows="dynamic",
@@ -2022,19 +2027,8 @@ with tab7:
         hide_index=True
     )
 
-    # Calculate Cost Above Par for display
+    # Calculate Cost Above Par for each row
     edited_scenarios['Cost Above Par ($)'] = edited_scenarios['Actual Cost ($)'] - par_cost
-
-    # Show all columns including calculated one
-    st.dataframe(
-        edited_scenarios[['Rate (%)', 'Actual Cost ($)', 'Cost Above Par ($)']].style.format({
-            'Rate (%)': '{:.3f}%',
-            'Actual Cost ($)': '${:,.0f}',
-            'Cost Above Par ($)': '${:,.0f}'
-        }),
-        use_container_width=True,
-        hide_index=True
-    )
 
     # Filter active scenarios
     active_scenarios = edited_scenarios[edited_scenarios['Rate (%)'] > 0].copy()
@@ -2073,6 +2067,7 @@ with tab7:
             results.append({
                 'Rate (%)': rate,
                 'Actual Cost': actual_cost,
+                'Cost Above Par': cost_above_par,
                 'Optimal Drop Needed (bps)': optimal_rate_drop,
                 'Actual Drop (bps)': actual_drop,
                 'Difference (bps)': difference,
@@ -2094,6 +2089,7 @@ with tab7:
         styled_df = results_df.style.format({
             'Rate (%)': '{:.3f}%',
             'Actual Cost': '${:,.0f}',
+            'Cost Above Par': '${:,.0f}',
             'Optimal Drop Needed (bps)': '{:.0f}',
             'Actual Drop (bps)': '{:.0f}',
             'Difference (bps)': '{:+.0f}',
