@@ -2361,6 +2361,372 @@ with tab7:
 
     else:
         st.info("Enter at least 2 rate scenarios above to begin analysis")
+
+with tab8:
+    st.header("📈 Net Benefit Over Time Analysis")
+
+    st.markdown("""
+    Analyze how the net benefit of refinancing accumulates over time in future value terms.
+    This shows the actual dollar benefit without present value discounting.
+    """)
+
+    # Input parameters specific to this analysis
+    st.subheader("🔧 Analysis Parameters")
+
+    col1, col2, col3, col4 = st.columns(4)
+
+    with col1:
+        analysis_invest_rate = st.number_input(
+            "Investment Rate (%)",
+            min_value=0.0,
+            max_value=20.0,
+            value=5.0,
+            step=0.5,
+            help="Return on invested payment savings",
+            key="tab8_invest"
+        ) / 100
+
+    with col2:
+        analysis_loan_term = st.number_input(
+            "Analysis Period (years)",
+            min_value=1,
+            max_value=30,
+            value=30,
+            step=1,
+            help="How many years to analyze",
+            key="tab8_term"
+        )
+
+    with col3:
+        include_taxes_calc = st.checkbox(
+            "Include Tax Effects",
+            value=True,
+            help="Include mortgage interest tax deduction",
+            key="tab8_taxes"
+        )
+
+    with col4:
+        include_closing_costs = st.checkbox(
+            "Include Closing Costs",
+            value=True,
+            help="Subtract closing costs from benefit",
+            key="tab8_costs"
+        )
+
+    st.markdown("---")
+    st.subheader("📊 Refinancing Scenario")
+
+    # Create a simple input for rate change and closing costs
+    col1b, col2b, col3b = st.columns(3)
+
+    with col1b:
+        rate_reduction = st.number_input(
+            "Rate Reduction (bps)",
+            min_value=0,
+            max_value=500,
+            value=50,
+            step=25,
+            help="How much lower is the new rate (in basis points)",
+            key="tab8_rate_reduction"
+        ) / 10000  # Convert bps to decimal
+
+    with col2b:
+        refi_closing_costs = st.number_input(
+            "Refinancing Costs ($)",
+            min_value=0,
+            max_value=50000,
+            value=5000,
+            step=500,
+            help="Total costs to refinance",
+            key="tab8_closing"
+        )
+
+    with col3b:
+        # Show effective rates
+        st.metric("Original Rate", f"{i0*100:.3f}%")
+        st.metric("New Rate", f"{(i0-rate_reduction)*100:.3f}%")
+
+    # Calculate net benefit over time
+    st.markdown("---")
+    st.subheader("💰 Net Benefit Analysis")
+
+    # Using the formula without lambda (no prepayment risk) and without discounting
+    # Net Benefit at time t = (x × M × (1-τ)) × t - C
+    # But we need to account for compound interest on savings
+
+    # Monthly calculations
+    monthly_rate_old = i0 / 12
+    monthly_rate_new = (i0 - rate_reduction) / 12
+    n_months_original = int(N * 12)
+    n_months_analysis = int(analysis_loan_term * 12)
+
+    # Calculate monthly payments
+    def calculate_payment(principal, monthly_rate, n_months):
+        if monthly_rate == 0:
+            return principal / n_months
+        return principal * monthly_rate / (1 - (1 + monthly_rate)**(-n_months))
+
+    pmt_old = calculate_payment(M, monthly_rate_old, n_months_original)
+    pmt_new = calculate_payment(M, monthly_rate_new, n_months_original)
+
+    # Calculate benefit over time
+    months = []
+    net_benefit_simple = []
+    net_benefit_compound = []
+    cumulative_payment_savings = []
+    cumulative_interest_earnings = []
+
+    savings_balance = 0
+    r_inv_monthly = analysis_invest_rate / 12
+
+    for month in range(1, n_months_analysis + 1):
+        months.append(month)
+
+        # Simple formula approach (no compounding)
+        t_years = month / 12
+        simple_benefit = rate_reduction * M * (1 - tau if include_taxes_calc else 1) * t_years
+        if include_closing_costs:
+            simple_benefit -= refi_closing_costs
+        net_benefit_simple.append(simple_benefit)
+
+        # Compound approach (with actual payment differences)
+        if month <= n_months_original:
+            # Calculate interest portions
+            # Remaining balance at this point
+            remaining_old = M
+            remaining_new = M
+
+            for m in range(1, month):
+                int_old = remaining_old * monthly_rate_old
+                prin_old = pmt_old - int_old
+                remaining_old -= prin_old
+
+                int_new = remaining_new * monthly_rate_new
+                prin_new = pmt_new - int_new
+                remaining_new -= prin_new
+
+            int_old = remaining_old * monthly_rate_old
+            int_new = remaining_new * monthly_rate_new
+
+            # Payment difference
+            if include_taxes_calc:
+                after_tax_pmt_old = pmt_old - int_old * tau
+                after_tax_pmt_new = pmt_new - int_new * tau
+                monthly_savings = after_tax_pmt_old - after_tax_pmt_new
+            else:
+                monthly_savings = pmt_old - pmt_new
+
+            # Add to savings with compound interest
+            interest_earned = savings_balance * r_inv_monthly
+            savings_balance = savings_balance * (1 + r_inv_monthly) + monthly_savings
+
+            cumulative_payment_savings.append(savings_balance - interest_earned * month)
+            cumulative_interest_earnings.append(interest_earned * month)
+
+        # Total compound benefit
+        compound_benefit = savings_balance
+        if include_closing_costs:
+            compound_benefit -= refi_closing_costs
+        net_benefit_compound.append(compound_benefit)
+
+    # Create DataFrame for display
+    df_results = pd.DataFrame({
+        'Month': months,
+        'Year': [m/12 for m in months],
+        'Simple Formula Benefit': net_benefit_simple,
+        'Compound Benefit': net_benefit_compound,
+        'Difference': [c - s for c, s in zip(net_benefit_compound, net_benefit_simple)]
+    })
+
+    # Display key metrics
+    col1c, col2c, col3c, col4c = st.columns(4)
+
+    with col1c:
+        st.metric("Monthly Payment Savings", f"${pmt_old - pmt_new:,.2f}")
+
+    with col2c:
+        if include_closing_costs:
+            breakeven_month = next((i for i, b in enumerate(net_benefit_compound) if b > 0), None)
+            if breakeven_month:
+                st.metric("Breakeven Period", f"{breakeven_month} months ({breakeven_month/12:.1f} years)")
+            else:
+                st.metric("Breakeven Period", "Beyond analysis period")
+        else:
+            st.metric("First Year Benefit", f"${net_benefit_compound[11]:,.2f}")
+
+    with col3c:
+        final_benefit = net_benefit_compound[-1] if net_benefit_compound else 0
+        st.metric(f"Total Benefit ({analysis_loan_term} years)", f"${final_benefit:,.2f}")
+
+    with col4c:
+        if include_closing_costs and refi_closing_costs > 0:
+            roi = (final_benefit + refi_closing_costs) / refi_closing_costs - 1
+            st.metric("ROI on Closing Costs", f"{roi:.1%}")
+
+    # Charts
+    st.markdown("---")
+    st.subheader("📊 Benefit Accumulation Charts")
+
+    # Create tabs for different views
+    chart_tab1, chart_tab2, chart_tab3 = st.tabs(["Net Benefit Over Time", "Monthly vs Cumulative", "Comparison"])
+
+    with chart_tab1:
+        fig = go.Figure()
+
+        # Add compound benefit line
+        fig.add_trace(go.Scatter(
+            x=df_results['Year'],
+            y=df_results['Compound Benefit'],
+            mode='lines',
+            name='Net Benefit (with compound interest)',
+            line=dict(color='green', width=3)
+        ))
+
+        # Add simple formula line
+        fig.add_trace(go.Scatter(
+            x=df_results['Year'],
+            y=df_results['Simple Formula Benefit'],
+            mode='lines',
+            name='Simple Formula (no compounding)',
+            line=dict(color='blue', width=2, dash='dot')
+        ))
+
+        # Add breakeven line
+        fig.add_hline(y=0, line_dash="dash", line_color="red",
+                     annotation_text="Breakeven")
+
+        fig.update_layout(
+            title="Net Benefit Over Time",
+            xaxis_title="Years",
+            yaxis_title="Net Benefit ($)",
+            hovermode='x unified',
+            height=500
+        )
+
+        st.plotly_chart(fig, use_container_width=True)
+
+    with chart_tab2:
+        # Show monthly savings vs cumulative
+        fig2 = go.Figure()
+
+        # Monthly savings (constant)
+        monthly_savings_list = [pmt_old - pmt_new] * len(months)
+        fig2.add_trace(go.Bar(
+            x=[m/12 for m in months],
+            y=monthly_savings_list,
+            name='Monthly Payment Savings',
+            yaxis='y2',
+            opacity=0.3,
+            marker_color='lightblue'
+        ))
+
+        # Cumulative benefit
+        fig2.add_trace(go.Scatter(
+            x=df_results['Year'],
+            y=df_results['Compound Benefit'],
+            mode='lines',
+            name='Cumulative Net Benefit',
+            line=dict(color='green', width=3)
+        ))
+
+        fig2.update_layout(
+            title="Monthly Savings and Cumulative Benefit",
+            xaxis_title="Years",
+            yaxis_title="Cumulative Benefit ($)",
+            yaxis2=dict(
+                title="Monthly Savings ($)",
+                overlaying='y',
+                side='right'
+            ),
+            hovermode='x unified',
+            height=500
+        )
+
+        st.plotly_chart(fig2, use_container_width=True)
+
+    with chart_tab3:
+        # Compare with and without closing costs
+        fig3 = go.Figure()
+
+        # With closing costs
+        fig3.add_trace(go.Scatter(
+            x=df_results['Year'],
+            y=df_results['Compound Benefit'],
+            mode='lines',
+            name='Net Benefit (after closing costs)' if include_closing_costs else 'Net Benefit',
+            line=dict(color='green', width=3)
+        ))
+
+        # Without closing costs (gross benefit)
+        gross_benefit = [b + (refi_closing_costs if include_closing_costs else 0) for b in net_benefit_compound]
+        fig3.add_trace(go.Scatter(
+            x=df_results['Year'],
+            y=gross_benefit,
+            mode='lines',
+            name='Gross Benefit (before closing costs)',
+            line=dict(color='blue', width=2, dash='dash')
+        ))
+
+        # Closing costs line
+        if include_closing_costs:
+            fig3.add_hline(y=-refi_closing_costs, line_dash="dot", line_color="red",
+                          annotation_text=f"Closing Costs: ${refi_closing_costs:,.0f}")
+
+        fig3.update_layout(
+            title="Net vs Gross Benefit Comparison",
+            xaxis_title="Years",
+            yaxis_title="Benefit ($)",
+            hovermode='x unified',
+            height=500
+        )
+
+        st.plotly_chart(fig3, use_container_width=True)
+
+    # Display detailed table
+    st.markdown("---")
+    st.subheader("📋 Detailed Benefit Table")
+
+    # Show selected years only
+    years_to_show = [1, 2, 3, 5, 10, 15, 20, 25, 30]
+    df_display = df_results[df_results['Year'].isin(years_to_show)].copy()
+
+    st.dataframe(
+        df_display.style.format({
+            'Month': '{:.0f}',
+            'Year': '{:.0f}',
+            'Simple Formula Benefit': '${:,.2f}',
+            'Compound Benefit': '${:,.2f}',
+            'Difference': '${:,.2f}'
+        }),
+        use_container_width=True
+    )
+
+    # Formula explanation
+    st.markdown("---")
+    st.subheader("📐 Formula Explanation")
+
+    st.info(f"""
+    **Simple Formula (without lambda/prepayment):**
+    Net Benefit = (Δr × M × (1-τ) × t) - C
+
+    Where:
+    - Δr = Rate reduction = {rate_reduction:.4f} ({rate_reduction*10000:.0f} bps)
+    - M = Loan amount = ${M:,.0f}
+    - τ = Tax rate = {tau:.2%} (if included)
+    - t = Time in years
+    - C = Closing costs = ${refi_closing_costs:,.0f} (if included)
+
+    **Compound Approach:**
+    - Calculates actual monthly payment difference
+    - Accounts for tax deduction on interest portion only
+    - Compounds savings at investment rate of {analysis_invest_rate:.2%}
+    - More accurate for long-term analysis
+
+    **Key Insight:**
+    The difference between simple and compound approaches grows over time due to:
+    1. Investment returns on accumulated savings
+    2. Changing tax benefits as loan amortizes
+    """)
 # Footer
 st.markdown("---")
 st.markdown("""
