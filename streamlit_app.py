@@ -1900,7 +1900,7 @@ with tab7:
             max_value=20.0,
             value=6.0,
             step=0.125,
-            help="The rate with no points or credits"
+            help="The par rate"
         ) / 100
 
     with col3:
@@ -1914,6 +1914,19 @@ with tab7:
         )
 
     with col4:
+        par_cost = st.number_input(
+            "Cost at Par Rate ($)",
+            min_value=-10000,
+            max_value=10000,
+            value=1000,
+            step=100,
+            help="The cost for the par rate"
+        )
+
+    # Add tax rate to second row
+    col1b, col2b, col3b, col4b = st.columns(4)
+
+    with col1b:
         points_tax_rate = st.number_input(
             "Marginal Tax Rate (%)",
             min_value=0.0,
@@ -1925,9 +1938,9 @@ with tab7:
 
     st.subheader("🔧 Economic Parameters")
 
-    col1b, col2b, col3b, col4b = st.columns(4)
+    col1c, col2c, col3c, col4c = st.columns(4)
 
-    with col1b:
+    with col1c:
         points_discount_rate = st.number_input(
             "Discount Rate (%)",
             min_value=0.0,
@@ -1937,7 +1950,7 @@ with tab7:
             help="Your personal discount rate"
         ) / 100
 
-    with col2b:
+    with col2c:
         points_invest_rate = st.number_input(
             "Investment Rate (%)",
             min_value=0.0,
@@ -1947,7 +1960,7 @@ with tab7:
             help="Return on invested savings"
         ) / 100
 
-    with col3b:
+    with col3c:
         points_move_prob = st.number_input(
             "Annual Probability of Moving (%)",
             min_value=0.0,
@@ -1957,7 +1970,7 @@ with tab7:
             help="Annual probability of selling/refinancing"
         ) / 100
 
-    with col4b:
+    with col4c:
         points_inflation = st.number_input(
             "Expected Inflation Rate (%)",
             min_value=0.0,
@@ -1974,18 +1987,20 @@ with tab7:
     st.subheader("📋 Rate & Cost Scenarios")
 
     st.info("""
-    Enter different rate/cost combinations below. Positive costs = points you pay, negative costs = lender credits.
-    The par rate has $0 cost. All costs are relative to par.
+    Enter different rate/cost combinations below. The "Cost Above Par" is automatically calculated.
     """)
 
-    # Create input table
+    # Create input table with more rows and actual cost
     scenarios_data = pd.DataFrame({
-        'Rate (%)': [points_par_rate * 100, 5.75, 5.50, 5.25, 6.25, 6.50, 0.0, 0.0],
-        'Cost Above Par ($)': [0, 4000, 8000, 12000, -4000, -8000, 0, 0]
+        'Rate (%)': [points_par_rate * 100, 5.75, 5.50, 5.25, 6.25, 6.50, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+        'Actual Cost ($)': [par_cost, 5000, 9000, 13000, -3000, -7000, 0, 0, 0, 0, 0, 0]
     })
 
+    # Add Cost Above Par as calculated column
+    scenarios_data['Cost Above Par ($)'] = scenarios_data['Actual Cost ($)'] - par_cost
+
     edited_scenarios = st.data_editor(
-        scenarios_data,
+        scenarios_data[['Rate (%)', 'Actual Cost ($)']],  # Only show editable columns
         column_config={
             'Rate (%)': st.column_config.NumberColumn(
                 'Rate (%)',
@@ -1995,13 +2010,28 @@ with tab7:
                 max_value=20.0,
                 step=0.125
             ),
-            'Cost Above Par ($)': st.column_config.NumberColumn(
-                'Cost Above Par ($)',
-                help="Points cost (positive) or lender credit (negative)",
+            'Actual Cost ($)': st.column_config.NumberColumn(
+                'Actual Cost ($)',
+                help="Total cost for this rate",
                 format="$%.0f",
-                step=500
+                step=100
             )
         },
+        num_rows="dynamic",
+        use_container_width=True,
+        hide_index=True
+    )
+
+    # Calculate Cost Above Par for display
+    edited_scenarios['Cost Above Par ($)'] = edited_scenarios['Actual Cost ($)'] - par_cost
+
+    # Show all columns including calculated one
+    st.dataframe(
+        edited_scenarios[['Rate (%)', 'Actual Cost ($)', 'Cost Above Par ($)']].style.format({
+            'Rate (%)': '{:.3f}%',
+            'Actual Cost ($)': '${:,.0f}',
+            'Cost Above Par ($)': '${:,.0f}'
+        }),
         use_container_width=True,
         hide_index=True
     )
@@ -2018,48 +2048,59 @@ with tab7:
         results = []
         for idx, row in active_scenarios.iterrows():
             rate = row['Rate (%)']
-            cost = row['Cost Above Par ($)']
+            actual_cost = row['Actual Cost ($)']
+            cost_above_par = row['Cost Above Par ($)']
 
-            # Use the existing formula - treating this as a refinancing decision at purchase
-            # The "original rate" is the par rate, the "new rate" is this scenario's rate
-            # Calculate using the same optimal threshold formula
+            # Use the existing formula with actual cost
             temp_x_star, _, _, _ = calculate_optimal_threshold(
                 points_loan_amount,
                 points_discount_rate,
                 points_lambda,
                 sigma,  # Using global sigma
-                abs(cost),  # Cost is absolute value
+                abs(actual_cost),  # Use actual cost
                 points_tax_rate
             )
 
             # The optimal threshold tells us how much the rate needs to drop
             optimal_rate_drop = -temp_x_star * 100  # Convert to percentage
+            actual_drop = (points_par_rate - rate / 100) * 10000  # Convert to basis points
+            difference = actual_drop - optimal_rate_drop
 
             # Simple net benefit calculation
             x = rate / 100 - points_par_rate
-            net_benefit = ((-x * points_loan_amount * (1 - points_tax_rate)) / (points_discount_rate + points_lambda)) - cost
+            net_benefit = ((-x * points_loan_amount * (1 - points_tax_rate)) / (points_discount_rate + points_lambda)) - actual_cost
 
             results.append({
                 'Rate (%)': rate,
-                'Cost': cost,
+                'Actual Cost': actual_cost,
                 'Optimal Drop Needed (bps)': optimal_rate_drop,
-                'Actual Drop (bps)': (points_par_rate - rate / 100) * 10000,
+                'Actual Drop (bps)': actual_drop,
+                'Difference (bps)': difference,
                 'Simple Net Benefit ($)': net_benefit
             })
 
         results_df = pd.DataFrame(results)
 
-        # Display with formatting
-        st.dataframe(
-            results_df.style.format({
-                'Rate (%)': '{:.3f}%',
-                'Cost': '${:,.0f}',
-                'Optimal Drop Needed (bps)': '{:.0f}',
-                'Actual Drop (bps)': '{:.0f}',
-                'Simple Net Benefit ($)': '${:,.2f}'
-            }),
-            use_container_width=True
-        )
+        # Custom styling function for the difference column
+        def style_difference(val):
+            if isinstance(val, (int, float)):
+                if val >= 0:
+                    return 'background-color: lightgreen'
+                else:
+                    return 'background-color: lightcoral'
+            return ''
+
+        # Display with formatting and color coding
+        styled_df = results_df.style.format({
+            'Rate (%)': '{:.3f}%',
+            'Actual Cost': '${:,.0f}',
+            'Optimal Drop Needed (bps)': '{:.0f}',
+            'Actual Drop (bps)': '{:.0f}',
+            'Difference (bps)': '{:+.0f}',
+            'Simple Net Benefit ($)': '${:,.2f}'
+        }).applymap(style_difference, subset=['Difference (bps)'])
+
+        st.dataframe(styled_df, use_container_width=True)
 
         # Selection for comparison
         st.markdown("---")
@@ -2073,7 +2114,7 @@ with tab7:
             scenario_1_idx = st.selectbox(
                 "Scenario 1",
                 range(len(active_scenarios)),
-                format_func=lambda x: f"Rate: {active_scenarios.iloc[x]['Rate (%)']}%, Cost: ${active_scenarios.iloc[x]['Cost Above Par ($)']:,.0f}"
+                format_func=lambda x: f"Rate: {active_scenarios.iloc[x]['Rate (%)']}%, Cost: ${active_scenarios.iloc[x]['Actual Cost ($)']:,.0f}"
             )
 
         with col2s:
@@ -2081,7 +2122,7 @@ with tab7:
                 "Scenario 2",
                 range(len(active_scenarios)),
                 index=1 if len(active_scenarios) > 1 else 0,
-                format_func=lambda x: f"Rate: {active_scenarios.iloc[x]['Rate (%)']}%, Cost: ${active_scenarios.iloc[x]['Cost Above Par ($)']:,.0f}"
+                format_func=lambda x: f"Rate: {active_scenarios.iloc[x]['Rate (%)']}%, Cost: ${active_scenarios.iloc[x]['Actual Cost ($)']:,.0f}"
             )
 
         if scenario_1_idx != scenario_2_idx:
@@ -2100,14 +2141,14 @@ with tab7:
             # Calculate for both scenarios
             n_months = int(points_loan_term * 12)
 
-            # Scenario 1
+            # Scenario 1 - using actual cost
             r1_monthly = s1['Rate (%)'] / 100 / 12
-            principal1 = points_loan_amount + s1['Cost Above Par ($)']  # Roll cost into loan
+            principal1 = points_loan_amount + s1['Actual Cost ($)']  # Roll actual cost into loan
             pmt1 = payment(principal1, r1_monthly, n_months)
 
-            # Scenario 2
+            # Scenario 2 - using actual cost
             r2_monthly = s2['Rate (%)'] / 100 / 12
-            principal2 = points_loan_amount + s2['Cost Above Par ($)']  # Roll cost into loan
+            principal2 = points_loan_amount + s2['Actual Cost ($)']  # Roll actual cost into loan
             pmt2 = payment(principal2, r2_monthly, n_months)
 
             # Calculate month-by-month comparison
@@ -2163,12 +2204,12 @@ with tab7:
             with col1r:
                 st.metric("Scenario 1 Rate", f"{s1['Rate (%)']}%")
                 st.metric("Scenario 1 Monthly Payment", f"${pmt1:,.2f}")
-                st.metric("Scenario 1 Total Cost", f"${s1['Cost Above Par ($)']:,.0f}")
+                st.metric("Scenario 1 Total Cost", f"${s1['Actual Cost ($)']:,.0f}")
 
             with col2r:
                 st.metric("Scenario 2 Rate", f"{s2['Rate (%)']}%")
                 st.metric("Scenario 2 Monthly Payment", f"${pmt2:,.2f}")
-                st.metric("Scenario 2 Total Cost", f"${s2['Cost Above Par ($)']:,.0f}")
+                st.metric("Scenario 2 Total Cost", f"${s2['Actual Cost ($)']:,.0f}")
 
             st.markdown("---")
 
