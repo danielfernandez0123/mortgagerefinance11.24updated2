@@ -843,7 +843,7 @@ with tab5:
               ),
               'Net Benefit ($)': st.column_config.NumberColumn(
                   'Net Benefit ($)',
-                  help="Net benefit = ρ + λ - x·M - C(M)",
+                  help="Net benefit = (-x·M)/(ρ+λ) - C(M)",
                   disabled=True,
                   format="$%.2f"
               )
@@ -873,14 +873,13 @@ with tab5:
                   difference = edited_df.loc[idx, 'Actual Rate Offered (%)'] - (optimal_rate * 100)
                   edited_df.loc[idx, 'Difference (%)'] = difference
 
-              # Calculate Net Benefit
-              # x should be positive when the new rate is lower than the original rate
-              x = i0 - (edited_df.loc[idx, 'Actual Rate Offered (%)'] / 100)
-              C_M = closing_cost
-              net_benefit = rho + lambda_val + x * M - C_M
-              edited_df.loc[idx, 'Net Benefit ($)'] = net_benefit
-                    
-
+                  # Calculate Net Benefit using the corrected formula
+                  # x is negative when the new rate is lower than the original rate
+                  x = (edited_df.loc[idx, 'Actual Rate Offered (%)'] / 100) - i0
+                  C_M = closing_cost
+                  # net_benefit = ((-x * M) / (rho + lambda_val)) - C_M
+                  net_benefit = ((-x * M) / (rho + lambda_val)) - C_M
+                  edited_df.loc[idx, 'Net Benefit ($)'] = net_benefit
 
       # Display with color coding
       def highlight_difference(val):
@@ -903,6 +902,51 @@ with tab5:
 
       styled_df = edited_df.style.applymap(highlight_difference, subset=['Difference (%)']).applymap(highlight_net_benefit, subset=['Net Benefit ($)'])
       st.dataframe(styled_df, use_container_width=True)
+
+      # Debug section - show calculation details for populated rows
+      st.markdown("---")
+      st.subheader("📐 Net Benefit Calculation Details")
+
+      # Find rows with both closing costs and actual rates entered
+      populated_rows = edited_df[(edited_df['Closing Costs ($)'] > 0) & (edited_df['Actual Rate Offered (%)'] > 0)]
+
+      if len(populated_rows) > 0:
+          # Show calculation for each populated row
+          for idx in populated_rows.index:
+              row_num = idx + 1  # Display as 1-based row number
+              closing_cost = edited_df.loc[idx, 'Closing Costs ($)']
+              actual_rate = edited_df.loc[idx, 'Actual Rate Offered (%)'] / 100
+
+              # Calculate all components
+              x = actual_rate - i0  # x is negative when offered rate < original rate
+              C_M = closing_cost
+              net_benefit = ((-x * M) / (rho + lambda_val)) - C_M
+
+              st.markdown(f"**Row {row_num} Calculation:**")
+              st.markdown(f"""
+              <div style='background-color: #f0f2f6; padding: 15px; border-radius: 5px; font-family: monospace;'>
+              Net Benefit = (-x·M)/(ρ+λ) - C(M)<br><br>
+
+              Where:<br>
+              - ρ (discount rate) = {rho:.4f} ({rho*100:.1f}%)<br>
+              - λ (lambda) = {lambda_val:.4f}<br>
+              - x (rate difference) = offered rate - i₀ = {actual_rate:.4f} - {i0:.4f} = {x:.4f} ({x*100:.2f}%)<br>
+              - M (mortgage) = ${M:,.0f}<br>
+              - C(M) (closing costs) = ${C_M:,.0f}<br><br>
+
+              Calculation:<br>
+              = (-({x:.4f}) × ${M:,.0f}) / ({rho:.4f} + {lambda_val:.4f}) - ${C_M:,.0f}<br>
+              = (${-x*M:,.2f}) / {rho + lambda_val:.4f} - ${C_M:,.0f}<br>
+              = ${(-x*M)/(rho + lambda_val):,.2f} - ${C_M:,.0f}<br>
+              = <b>${net_benefit:,.2f}</b><br><br>
+
+              Interpretation: {f"This is a GOOD deal - you gain ${net_benefit:,.2f}" if net_benefit > 0 else f"This is a BAD deal - you lose ${-net_benefit:,.2f}"}
+              </div>
+              """, unsafe_allow_html=True)
+
+              st.markdown("")  # Add spacing between rows
+      else:
+          st.info("Enter closing costs and actual rates in the table above to see calculation details.")
 
       # Summary of entered quotes
       active_quotes = edited_df[(edited_df['Closing Costs ($)'] > 0) & (edited_df['Actual Rate Offered (%)'] > 0)]
