@@ -1870,6 +1870,409 @@ with tab6:
       The ENPV gives the expected value of refinancing, weighted by how long you're likely to keep the mortgage.
       """)
 
+with tab7:
+    st.header("🏠 Points Analysis for Home Purchase")
+
+    st.markdown("""
+    Analyze whether to pay points or take lender credits when purchasing a home.
+    This uses the same refinancing formula to compare different rate/cost combinations.
+    """)
+
+    # Input parameters
+    st.subheader("📊 Loan Parameters")
+
+    col1, col2, col3, col4 = st.columns(4)
+
+    with col1:
+        points_loan_amount = st.number_input(
+            "Loan Amount ($)",
+            min_value=50000,
+            max_value=5000000,
+            value=400000,
+            step=10000,
+            help="The amount you're borrowing"
+        )
+
+    with col2:
+        points_par_rate = st.number_input(
+            "Par Rate (%)",
+            min_value=0.0,
+            max_value=20.0,
+            value=6.0,
+            step=0.125,
+            help="The rate with no points or credits"
+        ) / 100
+
+    with col3:
+        points_loan_term = st.number_input(
+            "Loan Term (years)",
+            min_value=15,
+            max_value=30,
+            value=30,
+            step=5,
+            help="Length of the mortgage"
+        )
+
+    with col4:
+        points_tax_rate = st.number_input(
+            "Marginal Tax Rate (%)",
+            min_value=0.0,
+            max_value=50.0,
+            value=28.0,
+            step=1.0,
+            help="Your marginal tax rate"
+        ) / 100
+
+    st.subheader("🔧 Economic Parameters")
+
+    col1b, col2b, col3b, col4b = st.columns(4)
+
+    with col1b:
+        points_discount_rate = st.number_input(
+            "Discount Rate (%)",
+            min_value=0.0,
+            max_value=20.0,
+            value=5.0,
+            step=0.5,
+            help="Your personal discount rate"
+        ) / 100
+
+    with col2b:
+        points_invest_rate = st.number_input(
+            "Investment Rate (%)",
+            min_value=0.0,
+            max_value=20.0,
+            value=5.0,
+            step=0.5,
+            help="Return on invested savings"
+        ) / 100
+
+    with col3b:
+        points_move_prob = st.number_input(
+            "Annual Probability of Moving (%)",
+            min_value=0.0,
+            max_value=50.0,
+            value=10.0,
+            step=1.0,
+            help="Annual probability of selling/refinancing"
+        ) / 100
+
+    with col4b:
+        points_inflation = st.number_input(
+            "Expected Inflation Rate (%)",
+            min_value=0.0,
+            max_value=10.0,
+            value=3.0,
+            step=0.5,
+            help="Expected inflation rate"
+        ) / 100
+
+    # Calculate lambda for this scenario
+    points_lambda = points_move_prob + points_par_rate / (np.exp(points_par_rate * points_loan_term) - 1) + points_inflation
+
+    st.markdown("---")
+    st.subheader("📋 Rate & Cost Scenarios")
+
+    st.info("""
+    Enter different rate/cost combinations below. Positive costs = points you pay, negative costs = lender credits.
+    The par rate has $0 cost. All costs are relative to par.
+    """)
+
+    # Create input table
+    scenarios_data = pd.DataFrame({
+        'Rate (%)': [points_par_rate * 100, 5.75, 5.50, 5.25, 6.25, 6.50, 0.0, 0.0],
+        'Cost Above Par ($)': [0, 4000, 8000, 12000, -4000, -8000, 0, 0]
+    })
+
+    edited_scenarios = st.data_editor(
+        scenarios_data,
+        column_config={
+            'Rate (%)': st.column_config.NumberColumn(
+                'Rate (%)',
+                help="Interest rate for this scenario",
+                format="%.3f",
+                min_value=0.0,
+                max_value=20.0,
+                step=0.125
+            ),
+            'Cost Above Par ($)': st.column_config.NumberColumn(
+                'Cost Above Par ($)',
+                help="Points cost (positive) or lender credit (negative)",
+                format="$%.0f",
+                step=500
+            )
+        },
+        use_container_width=True,
+        hide_index=True
+    )
+
+    # Filter active scenarios
+    active_scenarios = edited_scenarios[edited_scenarios['Rate (%)'] > 0].copy()
+
+    if len(active_scenarios) >= 2:
+        # Calculate optimal thresholds using existing formula
+        st.markdown("---")
+        st.subheader("🎯 Optimal Rate Analysis")
+
+        # For each scenario, calculate what would be the optimal threshold
+        results = []
+        for idx, row in active_scenarios.iterrows():
+            rate = row['Rate (%)']
+            cost = row['Cost Above Par ($)']
+
+            # Use the existing formula - treating this as a refinancing decision at purchase
+            # The "original rate" is the par rate, the "new rate" is this scenario's rate
+            # Calculate using the same optimal threshold formula
+            temp_x_star, _, _, _ = calculate_optimal_threshold(
+                points_loan_amount,
+                points_discount_rate,
+                points_lambda,
+                sigma,  # Using global sigma
+                abs(cost),  # Cost is absolute value
+                points_tax_rate
+            )
+
+            # The optimal threshold tells us how much the rate needs to drop
+            optimal_rate_drop = -temp_x_star * 100  # Convert to percentage
+
+            # Simple net benefit calculation
+            x = rate / 100 - points_par_rate
+            net_benefit = ((-x * points_loan_amount * (1 - points_tax_rate)) / (points_discount_rate + points_lambda)) - cost
+
+            results.append({
+                'Rate (%)': rate,
+                'Cost': cost,
+                'Optimal Drop Needed (bps)': optimal_rate_drop,
+                'Actual Drop (bps)': (points_par_rate - rate / 100) * 10000,
+                'Simple Net Benefit ($)': net_benefit
+            })
+
+        results_df = pd.DataFrame(results)
+
+        # Display with formatting
+        st.dataframe(
+            results_df.style.format({
+                'Rate (%)': '{:.3f}%',
+                'Cost': '${:,.0f}',
+                'Optimal Drop Needed (bps)': '{:.0f}',
+                'Actual Drop (bps)': '{:.0f}',
+                'Simple Net Benefit ($)': '${:,.2f}'
+            }),
+            use_container_width=True
+        )
+
+        # Selection for comparison
+        st.markdown("---")
+        st.subheader("📊 Detailed Comparison")
+
+        st.markdown("Select two scenarios to compare:")
+
+        col1s, col2s = st.columns(2)
+
+        with col1s:
+            scenario_1_idx = st.selectbox(
+                "Scenario 1",
+                range(len(active_scenarios)),
+                format_func=lambda x: f"Rate: {active_scenarios.iloc[x]['Rate (%)']}%, Cost: ${active_scenarios.iloc[x]['Cost Above Par ($)']:,.0f}"
+            )
+
+        with col2s:
+            scenario_2_idx = st.selectbox(
+                "Scenario 2",
+                range(len(active_scenarios)),
+                index=1 if len(active_scenarios) > 1 else 0,
+                format_func=lambda x: f"Rate: {active_scenarios.iloc[x]['Rate (%)']}%, Cost: ${active_scenarios.iloc[x]['Cost Above Par ($)']:,.0f}"
+            )
+
+        if scenario_1_idx != scenario_2_idx:
+            # Get selected scenarios
+            s1 = active_scenarios.iloc[scenario_1_idx]
+            s2 = active_scenarios.iloc[scenario_2_idx]
+
+            # Calculate detailed comparison using ENPV methodology
+            def payment(principal, monthly_rate, n_months):
+                """Level payment on an amortizing loan."""
+                if monthly_rate == 0:
+                    return principal / n_months
+                denom = 1.0 - (1.0 + monthly_rate) ** (-n_months)
+                return principal * monthly_rate / denom
+
+            # Calculate for both scenarios
+            n_months = int(points_loan_term * 12)
+
+            # Scenario 1
+            r1_monthly = s1['Rate (%)'] / 100 / 12
+            principal1 = points_loan_amount + s1['Cost Above Par ($)']  # Roll cost into loan
+            pmt1 = payment(principal1, r1_monthly, n_months)
+
+            # Scenario 2
+            r2_monthly = s2['Rate (%)'] / 100 / 12
+            principal2 = points_loan_amount + s2['Cost Above Par ($)']  # Roll cost into loan
+            pmt2 = payment(principal2, r2_monthly, n_months)
+
+            # Calculate month-by-month comparison
+            bal1 = principal1
+            bal2 = principal2
+            savings_account = 0.0
+            r_inv_monthly = points_invest_rate / 12
+
+            # Find breakeven month
+            breakeven_month = None
+            breakeven_savings = 0
+            breakeven_interest_earned = 0
+
+            for month in range(1, n_months + 1):
+                # Calculate interest and principal for both
+                int1 = bal1 * r1_monthly
+                prin1 = pmt1 - int1
+                bal1 -= prin1
+
+                int2 = bal2 * r2_monthly
+                prin2 = pmt2 - int2
+                bal2 -= prin2
+
+                # Payment difference (positive if S1 payment > S2 payment)
+                if points_tax_rate > 0:
+                    # After-tax payment difference
+                    after_tax_pmt1 = pmt1 - (int1 * points_tax_rate)
+                    after_tax_pmt2 = pmt2 - (int2 * points_tax_rate)
+                    pmt_diff = after_tax_pmt1 - after_tax_pmt2
+                else:
+                    pmt_diff = pmt1 - pmt2
+
+                # Update savings account
+                interest_earned = savings_account * r_inv_monthly
+                savings_account = savings_account * (1 + r_inv_monthly) + pmt_diff
+
+                # Net position: savings + balance difference
+                balance_diff = bal1 - bal2
+                net_position = savings_account + balance_diff
+
+                # Check for breakeven
+                if breakeven_month is None and net_position >= 0:
+                    breakeven_month = month
+                    breakeven_savings = savings_account
+                    breakeven_interest_earned = interest_earned
+
+            # Display results
+            st.markdown("---")
+            st.subheader("📈 Comparison Results")
+
+            col1r, col2r = st.columns(2)
+
+            with col1r:
+                st.metric("Scenario 1 Rate", f"{s1['Rate (%)']}%")
+                st.metric("Scenario 1 Monthly Payment", f"${pmt1:,.2f}")
+                st.metric("Scenario 1 Total Cost", f"${s1['Cost Above Par ($)']:,.0f}")
+
+            with col2r:
+                st.metric("Scenario 2 Rate", f"{s2['Rate (%)']}%")
+                st.metric("Scenario 2 Monthly Payment", f"${pmt2:,.2f}")
+                st.metric("Scenario 2 Total Cost", f"${s2['Cost Above Par ($)']:,.0f}")
+
+            st.markdown("---")
+
+            # Breakeven analysis
+            if breakeven_month:
+                years = breakeven_month / 12
+                st.success(f"**Breakeven: {breakeven_month} months ({years:.1f} years)**")
+
+                col1b, col2b, col3b = st.columns(3)
+
+                with col1b:
+                    st.metric("Savings at Breakeven", f"${breakeven_savings:,.2f}")
+
+                with col2b:
+                    st.metric("Total Interest Earned", f"${breakeven_interest_earned * breakeven_month:,.2f}")
+
+                with col3b:
+                    st.metric("Monthly Payment Difference", f"${abs(pmt1 - pmt2):,.2f}")
+
+                # Final position at end of term
+                st.markdown("---")
+                st.subheader("🏁 End of Term Analysis")
+
+                final_savings = savings_account
+                final_bal1 = bal1
+                final_bal2 = bal2
+
+                col1f, col2f, col3f = st.columns(3)
+
+                with col1f:
+                    st.metric("Final Savings Balance", f"${final_savings:,.2f}")
+
+                with col2f:
+                    st.metric("Scenario 1 Final Balance", f"${final_bal1:,.2f}")
+
+                with col3f:
+                    st.metric("Scenario 2 Final Balance", f"${final_bal2:,.2f}")
+
+                total_advantage = final_savings + (final_bal1 - final_bal2)
+
+                if total_advantage > 0:
+                    st.success(f"**Scenario 1 is better by ${total_advantage:,.2f} at loan maturity**")
+                else:
+                    st.success(f"**Scenario 2 is better by ${-total_advantage:,.2f} at loan maturity**")
+
+                # ENPV calculation with mortality
+                st.markdown("---")
+                st.subheader("💰 Expected Net Present Value (ENPV)")
+
+                # Calculate ENPV using CPR
+                SMM = 1 - (1 - points_move_prob)**(1/12)
+
+                # Recalculate with present value
+                bal1_pv = principal1
+                bal2_pv = principal2
+                savings_pv = 0.0
+                enpv = 0.0
+                survival = 1.0
+
+                for month in range(1, n_months + 1):
+                    # Same calculations as before
+                    int1 = bal1_pv * r1_monthly
+                    prin1 = pmt1 - int1
+                    bal1_pv -= prin1
+
+                    int2 = bal2_pv * r2_monthly
+                    prin2 = pmt2 - int2
+                    bal2_pv -= prin2
+
+                    if points_tax_rate > 0:
+                        after_tax_pmt1 = pmt1 - (int1 * points_tax_rate)
+                        after_tax_pmt2 = pmt2 - (int2 * points_tax_rate)
+                        pmt_diff = after_tax_pmt1 - after_tax_pmt2
+                    else:
+                        pmt_diff = pmt1 - pmt2
+
+                    savings_pv = savings_pv * (1 + r_inv_monthly) + pmt_diff
+
+                    net_position = savings_pv + (bal1_pv - bal2_pv)
+
+                    # Discount to present value
+                    pv_factor = 1 / ((1 + points_discount_rate / 12) ** month)
+                    npv = net_position * pv_factor
+
+                    # Add mortality-weighted NPV
+                    mortality = survival * SMM
+                    enpv += npv * mortality
+                    survival = survival * (1 - SMM)
+
+                st.metric("Expected NPV (ENPV)", f"${enpv:,.2f}")
+
+                if enpv > 0:
+                    st.info(f"Based on ENPV analysis, **Scenario 1** ({s1['Rate (%)']}%) is preferable")
+                else:
+                    st.info(f"Based on ENPV analysis, **Scenario 2** ({s2['Rate (%)']}%) is preferable")
+
+            else:
+                st.warning("No breakeven point found within the loan term")
+
+        else:
+            st.warning("Please select two different scenarios to compare")
+
+    else:
+        st.info("Enter at least 2 rate scenarios above to begin analysis")
 # Footer
 st.markdown("---")
 st.markdown("""
