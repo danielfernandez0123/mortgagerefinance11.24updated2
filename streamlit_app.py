@@ -68,7 +68,7 @@ st.sidebar.header("📊 Input Parameters")
 st.sidebar.markdown("---")
 
 # Create tabs for different input sections
-tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8 = st.tabs(["Tab 1 Name", "Tab 2 Name", "Tab 3 Name", "Tab 4 Name", "Tab 5 Name", "Tab 6 Name", "Tab 7 Name", "Net Benefit Timeline"])
+tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8 = st.tabs(["🏠 Main Calculator", "📈 Sensitivity Analysis", "📖 Paper Explanation", "🔧 Additional Tools", "💰 Points Analysis", "📊 ENPV Analysis", "🏠 Buy Points Analysis", "Net Benefit Timeline"])
 with st.sidebar:
     st.subheader("Mortgage Information")
     M = st.number_input(
