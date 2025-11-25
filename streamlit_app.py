@@ -873,12 +873,13 @@ with tab5:
                   difference = edited_df.loc[idx, 'Actual Rate Offered (%)'] - (optimal_rate * 100)
                   edited_df.loc[idx, 'Difference (%)'] = difference
 
-                    # Calculate Net Benefit
-                    # x should be positive when the new rate is lower than the original rate
-                    x = i0 - (edited_df.loc[idx, 'Actual Rate Offered (%)'] / 100)
-                    C_M = closing_cost
-                    net_benefit = rho + lambda_val + x * M - C_M
-                    edited_df.loc[idx, 'Net Benefit ($)'] = net_benefit
+              # Calculate Net Benefit
+              # x should be positive when the new rate is lower than the original rate
+              x = i0 - (edited_df.loc[idx, 'Actual Rate Offered (%)'] / 100)
+              C_M = closing_cost
+              net_benefit = rho + lambda_val + x * M - C_M
+              edited_df.loc[idx, 'Net Benefit ($)'] = net_benefit
+                    
 
 
       # Display with color coding
