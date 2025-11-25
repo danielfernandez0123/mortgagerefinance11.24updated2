@@ -793,6 +793,86 @@ with tab5:
       **Example:** If closing costs are $5,000 and the table shows 4.500%,
       then you should refinance when rates drop to 4.500% or below.
       """)
+
+      # Helper functions for ENPV calculation (from imp file)
+      def payment(principal, monthly_rate, n_months):
+          """Level payment on an amortizing loan."""
+          if monthly_rate == 0:
+              return principal / n_months
+          denom = 1.0 - (1.0 + monthly_rate) ** (-n_months)
+          return principal * monthly_rate / denom
+
+      def calculate_enpv_benefit(current_balance, current_rate, new_rate, remaining_years, new_term_years,
+                                closing_costs, invest_rate, discount_rate, cpr, finance_costs_in_loan=True):
+          """Calculate ENPV benefit using the imp file methodology"""
+          n_old = int(round(remaining_years * 12))
+          n_new = int(round(new_term_years * 12))
+          horizon = max(n_old, n_new)
+
+          r_old = current_rate / 12.0
+          r_new = new_rate / 12.0
+          r_inv = invest_rate / 12.0
+          r_disc = discount_rate / 12.0
+
+          old_principal = current_balance
+          new_principal = current_balance + closing_costs if finance_costs_in_loan else current_balance
+
+          # Monthly payments
+          pmt_old = payment(old_principal, r_old, n_old)
+          pmt_new = payment(new_principal, r_new, n_new)
+
+          bal_old = old_principal
+          bal_new = new_principal
+          inv_bal = 0.0
+
+          net_gain_pv = []
+
+          # Build cash flows
+          for t in range(1, horizon + 1):
+              # Old loan
+              if t <= n_old and bal_old > 0:
+                  interest_old = r_old * bal_old
+                  principal_old = pmt_old - interest_old
+                  bal_old = max(0.0, bal_old - principal_old)
+                  p_old_t = pmt_old
+              else:
+                  p_old_t = 0.0
+                  bal_old = 0.0
+
+              # New loan
+              if t <= n_new and bal_new > 0:
+                  interest_new = r_new * bal_new
+                  principal_new = pmt_new - interest_new
+                  bal_new = max(0.0, bal_new - principal_new)
+                  p_new_t = pmt_new
+              else:
+                  p_new_t = 0.0
+                  bal_new = 0.0
+
+              # Payment savings and investment
+              pmt_sav_t = p_old_t - p_new_t
+              inv_bal = inv_bal * (1.0 + r_inv) + pmt_sav_t
+
+              # Total advantage and present value
+              balance_adv = bal_old - bal_new
+              total_adv = inv_bal + balance_adv
+
+              # Present value
+              pv_factor = 1.0 / ((1.0 + r_disc) ** t)
+              net_gain_pv.append(total_adv * pv_factor)
+
+          # Calculate ENPV with mortality
+          SMM = 1 - (1 - cpr)**(1/12)
+          survival = 1.0
+          enpv = 0.0
+
+          for t in range(min(360, len(net_gain_pv))):
+              mortality_t = survival * SMM
+              enpv += net_gain_pv[t] * mortality_t
+              survival = survival * (1 - SMM)
+
+          return enpv
+
 # Second Table - User Input Section
       st.markdown("---")
       st.subheader("📊 Compare Your Actual Quotes")
@@ -807,7 +887,8 @@ with tab5:
           'Actual Rate Offered (%)': [0.0] * 10,
           'Model Optimal Rate (%)': [0.0] * 10,
           'Difference (%)': [0.0] * 10,
-          'Net Benefit ($)': [0.0] * 10
+          'Net Benefit ($)': [0.0] * 10,
+          'ENPV Benefit ($)': [0.0] * 10
       })
 
       # Create editable dataframe
@@ -846,6 +927,12 @@ with tab5:
                   help="Net benefit = (-x·M)/(ρ+λ) - C(M)",
                   disabled=True,
                   format="$%.2f"
+              ),
+              'ENPV Benefit ($)': st.column_config.NumberColumn(
+                  'ENPV Benefit ($)',
+                  help="Expected NPV using detailed cash flow model with prepayment",
+                  disabled=True,
+                  format="$%.2f"
               )
           },
           num_rows="dynamic",
@@ -881,6 +968,27 @@ with tab5:
                   net_benefit = ((-x * M) / (rho + lambda_val)) - C_M
                   edited_df.loc[idx, 'Net Benefit ($)'] = net_benefit
 
+                  # Calculate ENPV Benefit
+                  # Use mu (probability of moving) as CPR, not the full lambda
+                  cpr_for_calc = mu  # Just the moving probability
+                  # If points were specified in closing costs, extract them
+                  points_amount = points * M  # Use the sidebar points value
+                  fixed_fees = closing_cost - points_amount
+
+                  enpv_benefit = calculate_enpv_benefit(
+                      current_balance=M,
+                      current_rate=i0,
+                      new_rate=edited_df.loc[idx, 'Actual Rate Offered (%)'] / 100,
+                      remaining_years=Gamma,
+                      new_term_years=30,  # Assuming 30-year refi
+                      closing_costs=closing_cost,
+                      invest_rate=rho,  # Using discount rate as investment rate
+                      discount_rate=rho,
+                      cpr=cpr_for_calc,
+                      finance_costs_in_loan=True
+                  )
+                  edited_df.loc[idx, 'ENPV Benefit ($)'] = enpv_benefit
+
       # Display with color coding
       def highlight_difference(val):
           """Color code the difference column"""
@@ -891,8 +999,8 @@ with tab5:
                   return 'background-color: lightcoral'
           return ''
 
-      def highlight_net_benefit(val):
-          """Color code the net benefit column"""
+      def highlight_benefit(val):
+          """Color code the benefit columns"""
           if isinstance(val, (int, float)):
               if val > 0:
                   return 'background-color: lightgreen'
@@ -900,12 +1008,16 @@ with tab5:
                   return 'background-color: lightcoral'
           return ''
 
-      styled_df = edited_df.style.applymap(highlight_difference, subset=['Difference (%)']).applymap(highlight_net_benefit, subset=['Net Benefit ($)'])
-      st.dataframe(styled_df, use_container_width=True)
+      # Apply styling - note we need to handle multiple columns
+      style = edited_df.style
+      style = style.applymap(highlight_difference, subset=['Difference (%)'])
+      style = style.applymap(highlight_benefit, subset=['Net Benefit ($)', 'ENPV Benefit ($)'])
+
+      st.dataframe(style, use_container_width=True)
 
       # Debug section - show calculation details for populated rows
       st.markdown("---")
-      st.subheader("📐 Net Benefit Calculation Details")
+      st.subheader("📐 Calculation Details")
 
       # Find rows with both closing costs and actual rates entered
       populated_rows = edited_df[(edited_df['Closing Costs ($)'] > 0) & (edited_df['Actual Rate Offered (%)'] > 0)]
@@ -921,28 +1033,45 @@ with tab5:
               x = actual_rate - i0  # x is negative when offered rate < original rate
               C_M = closing_cost
               net_benefit = ((-x * M) / (rho + lambda_val)) - C_M
+              enpv_benefit = edited_df.loc[idx, 'ENPV Benefit ($)']
 
               st.markdown(f"**Row {row_num} Calculation:**")
-              st.markdown(f"""
-              <div style='background-color: #f0f2f6; padding: 15px; border-radius: 5px; font-family: monospace;'>
-              Net Benefit = (-x·M)/(ρ+λ) - C(M)<br><br>
 
-              Where:<br>
-              - ρ (discount rate) = {rho:.4f} ({rho*100:.1f}%)<br>
-              - λ (lambda) = {lambda_val:.4f}<br>
-              - x (rate difference) = offered rate - i₀ = {actual_rate:.4f} - {i0:.4f} = {x:.4f} ({x*100:.2f}%)<br>
-              - M (mortgage) = ${M:,.0f}<br>
-              - C(M) (closing costs) = ${C_M:,.0f}<br><br>
+              col1, col2 = st.columns(2)
 
-              Calculation:<br>
-              = (-({x:.4f}) × ${M:,.0f}) / ({rho:.4f} + {lambda_val:.4f}) - ${C_M:,.0f}<br>
-              = (${-x*M:,.2f}) / {rho + lambda_val:.4f} - ${C_M:,.0f}<br>
-              = ${(-x*M)/(rho + lambda_val):,.2f} - ${C_M:,.0f}<br>
-              = <b>${net_benefit:,.2f}</b><br><br>
+              with col1:
+                  st.markdown(f"""
+                  <div style='background-color: #f0f2f6; padding: 15px; border-radius: 5px; font-family: monospace;'>
+                  <b>Simple Net Benefit Formula:</b><br>
+                  Net Benefit = (-x·M)/(ρ+λ) - C(M)<br><br>
 
-              Interpretation: {f"This is a GOOD deal - you gain ${net_benefit:,.2f}" if net_benefit > 0 else f"This is a BAD deal - you lose ${-net_benefit:,.2f}"}
-              </div>
-              """, unsafe_allow_html=True)
+                  Where:<br>
+                  - ρ = {rho:.4f} ({rho*100:.1f}%)<br>
+                  - λ = {lambda_val:.4f}<br>
+                  - x = {actual_rate:.4f} - {i0:.4f} = {x:.4f}<br>
+                  - M = ${M:,.0f}<br>
+                  - C(M) = ${C_M:,.0f}<br><br>
+
+                  Result: <b>${net_benefit:,.2f}</b>
+                  </div>
+                  """, unsafe_allow_html=True)
+
+              with col2:
+                  st.markdown(f"""
+                  <div style='background-color: #f0f2f6; padding: 15px; border-radius: 5px; font-family: monospace;'>
+                  <b>ENPV (Detailed Model):</b><br>
+                  Uses actual cash flows with:<br><br>
+
+                  - CPR = {mu*100:.1f}% (moving prob)<br>
+                  - Old rate = {i0*100:.2f}%<br>
+                  - New rate = {actual_rate*100:.2f}%<br>
+                  - Remaining term = {Gamma} years<br>
+                  - New term = 30 years<br>
+                  - Investment rate = {rho*100:.1f}%<br><br>
+
+                  Result: <b>${enpv_benefit:,.2f}</b>
+                  </div>
+                  """, unsafe_allow_html=True)
 
               st.markdown("")  # Add spacing between rows
       else:
@@ -953,7 +1082,7 @@ with tab5:
 
       if len(active_quotes) > 0:
           st.markdown("### Quote Analysis")
-          col1, col2, col3 = st.columns(3)
+          col1, col2, col3, col4 = st.columns(4)
 
           with col1:
               best_idx = active_quotes['Difference (%)'].idxmin()
@@ -966,6 +1095,11 @@ with tab5:
               st.metric("Good Deals", f"{good_deals} of {len(active_quotes)}")
 
           with col3:
+              best_enpv_idx = active_quotes['ENPV Benefit ($)'].idxmax()
+              best_enpv = active_quotes.loc[best_enpv_idx, 'ENPV Benefit ($)']
+              st.metric("Best ENPV", f"${best_enpv:,.0f}")
+
+          with col4:
               avg_diff = active_quotes['Difference (%)'].mean()
               st.metric("Avg Difference", f"{avg_diff:+.3f}%")
 
