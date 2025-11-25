@@ -853,8 +853,7 @@ with tab5:
               closing_cost = edited_df.loc[idx, 'Closing Costs ($)']
 
               # Calculate the optimal threshold for this closing cost
-              temp_x_star, _, _, _ = calculate_optimal_threshold(M, rho, lambda_val, sigma,
-  closing_cost, tau)
+              temp_x_star, _, _, _ = calculate_optimal_threshold(M, rho, lambda_val, sigma, closing_cost, tau)
 
               # Calculate the optimal rate
               optimal_rate = i0 - abs(temp_x_star)
