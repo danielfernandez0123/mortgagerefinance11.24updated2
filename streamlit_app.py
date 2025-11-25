@@ -2727,6 +2727,7 @@ with tab8:
     1. Investment returns on accumulated savings
     2. Changing tax benefits as loan amortizes
     """)
+
 # Footer
 st.markdown("---")
 st.markdown("""
