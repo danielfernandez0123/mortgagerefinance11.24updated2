@@ -806,7 +806,8 @@ with tab5:
           'Closing Costs ($)': [0] * 10,  # Start with 10 empty rows
           'Actual Rate Offered (%)': [0.0] * 10,
           'Model Optimal Rate (%)': [0.0] * 10,
-          'Difference (%)': [0.0] * 10
+          'Difference (%)': [0.0] * 10,
+          'Net Benefit ($)': [0.0] * 10
       })
 
       # Create editable dataframe
@@ -839,7 +840,14 @@ with tab5:
                   help="Actual minus Optimal (negative = good deal)",
                   disabled=True,
                   format="%.3f"
+              ),
+              'Net Benefit ($)': st.column_config.NumberColumn(
+                  'Net Benefit ($)',
+                  help="Net benefit = ρ + λ - x·M - C(M)",
+                  disabled=True,
+                  format="$%.2f"
               )
+
           },
           num_rows="dynamic",
           hide_index=True,
@@ -863,9 +871,11 @@ with tab5:
 
               # Calculate difference if actual rate is entered
               if edited_df.loc[idx, 'Actual Rate Offered (%)'] > 0:
-                  difference = edited_df.loc[idx, 'Actual Rate Offered (%)'] - (optimal_rate *
-  100)
-                  edited_df.loc[idx, 'Difference (%)'] = difference
+            # Calculate Net Benefit
+                    x = -(edited_df.loc[idx, 'Actual Rate Offered (%)'] / 100 - i0)
+                    C_M = closing_cost
+                    net_benefit = rho + lambda_val - x * M - C_M
+                    edited_df.loc[idx, 'Net Benefit ($)'] = net_benefit
 
       # Display with color coding
           def highlight_difference(val):
