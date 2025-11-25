@@ -1040,6 +1040,7 @@ with tab5:
                   bal_new = new_principal
                   opt1_sav = 0.0
                   opt2_sav = 0.0
+                  initial_pmt_sav = 0  # Initialize
 
                   history = []
                   amort_history = []
@@ -1087,14 +1088,12 @@ with tab5:
                           principal_new = 0.0
                           tax_benefit_new = 0.0
 
-                                            # Payment savings (calculate initial savings amount)
+                      # Calculate initial payment savings (only on first month)
                       if t == 1:
-                          initial_pmt_sav = pmt_old - pmt_new  # Store the initial payment difference
-                          if comp_include_taxes:
-                              # Adjust for taxes
-                              initial_interest_old = r_old * M
-                              initial_interest_new = r_new * (M + closing_costs if comp_finance_costs else M)
-                              initial_pmt_sav = (pmt_old - initial_interest_old * tau) - (pmt_new - initial_interest_new * tau)
+                          initial_pmt_sav = p_old_t - p_new_t
+
+                      # Current month payment savings (for display/tracking)
+                      pmt_sav_t = p_old_t - p_new_t
 
                       # Option 2 savings accumulation (use constant initial payment savings throughout)
                       opt2_sav = opt2_sav * (1.0 + r_inv) + initial_pmt_sav
@@ -1118,6 +1117,7 @@ with tab5:
                           'opt1_sav': opt1_sav,
                           'total_adv': total_adv,
                           'pmt_sav': pmt_sav_t,
+                          'initial_pmt_sav': initial_pmt_sav,
                           'pmt_old': pmt_old,
                           'formula': f"{opt2_sav:.2f} + ({bal_old:.2f} - {bal_new:.2f}) - {opt1_sav:.2f}"
                       }
@@ -1198,7 +1198,8 @@ with tab5:
 
                           <b>Details:</b><br>
                           Option 2 Savings: ${parts['opt2_sav']:.2f}<br>
-                          Payment Savings This Month: ${parts['pmt_sav']:.2f}<br>
+                          Monthly Contribution (constant): ${parts['initial_pmt_sav']:.2f}<br>
+                          Current Payment Difference: ${parts['pmt_sav']:.2f}<br>
                           Old Loan Balance: ${parts['bal_old']:.2f}<br>
                           New Loan Balance: ${parts['bal_new']:.2f}<br>
                           Balance Advantage: ${parts['balance_adv']:.2f}<br>
@@ -1214,7 +1215,8 @@ with tab5:
 
                           <b>Details:</b><br>
                           Option 2 Savings: ${parts['opt2_sav']:.2f}<br>
-                          Payment Savings This Month: ${parts['pmt_sav']:.2f}<br>
+                          Monthly Contribution (constant): ${parts['initial_pmt_sav']:.2f}<br>
+                          Current Payment Difference: ${parts['pmt_sav']:.2f}<br>
                           Old Loan Balance: ${parts['bal_old']:.2f} (paid off)<br>
                           New Loan Balance: ${parts['bal_new']:.2f}<br>
                           Balance Advantage: ${parts['balance_adv']:.2f}<br>
