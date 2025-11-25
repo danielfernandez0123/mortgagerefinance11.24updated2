@@ -2457,7 +2457,7 @@ with tab8:
     # Monthly calculations
     monthly_rate_old = i0 / 12
     monthly_rate_new = (i0 - rate_reduction) / 12
-    n_months_original = int(N * 12)
+    n_months_original = int(Gamma * 12)
     n_months_analysis = int(analysis_loan_term * 12)
 
     # Calculate monthly payments
