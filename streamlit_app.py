@@ -805,25 +805,19 @@ with tab5:
       """)
 
       # Create empty dataframe for user input
+      n_rows = 10
       input_data = pd.DataFrame({
-          'Select': [False] * 10,  # Checkbox column
-          'Closing Costs ($)': [0] * 10,  # Start with 10 empty rows
-          'Actual Rate Offered (%)': [0.0] * 10,
-          'Model Optimal Rate (%)': [0.0] * 10,
-          'Difference (%)': [0.0] * 10,
-          'Net Benefit ($)': [0.0] * 10
+          'Closing Costs ($)': [None] * n_rows,  # Use None instead of 0
+          'Actual Rate Offered (%)': [None] * n_rows,
+          'Model Optimal Rate (%)': [None] * n_rows,
+          'Difference (%)': [None] * n_rows,
+          'Net Benefit ($)': [None] * n_rows
       })
 
       # Create editable dataframe
-      edited_df = st.data_editor(
+      edited_df_raw = st.data_editor(
           input_data,
           column_config={
-              'Select': st.column_config.CheckboxColumn(
-                  'Select',
-                  help="Check to include in detailed comparison charts below",
-                  default=False,
-                  width="small"
-              ),
               'Closing Costs ($)': st.column_config.NumberColumn(
                   'Closing Costs ($)',
                   help="Enter the total closing costs quoted",
@@ -863,9 +857,12 @@ with tab5:
           use_container_width=True
       )
 
+      # Make a copy to work with
+      edited_df = edited_df_raw.copy()
+
       # Calculate optimal rates for entered closing costs
       for idx in edited_df.index:
-          if edited_df.loc[idx, 'Closing Costs ($)'] > 0:
+          if pd.notna(edited_df.loc[idx, 'Closing Costs ($)']) and edited_df.loc[idx, 'Closing Costs ($)'] > 0:
               # Get the entered closing cost
               closing_cost = edited_df.loc[idx, 'Closing Costs ($)']
 
@@ -879,7 +876,7 @@ with tab5:
               edited_df.loc[idx, 'Model Optimal Rate (%)'] = optimal_rate * 100
 
               # Calculate difference if actual rate is entered
-              if edited_df.loc[idx, 'Actual Rate Offered (%)'] > 0:
+              if pd.notna(edited_df.loc[idx, 'Actual Rate Offered (%)']) and edited_df.loc[idx, 'Actual Rate Offered (%)'] > 0:
                   difference = edited_df.loc[idx, 'Actual Rate Offered (%)'] - (optimal_rate * 100)
                   edited_df.loc[idx, 'Difference (%)'] = difference
 
@@ -894,7 +891,7 @@ with tab5:
       # Display with color coding
       def highlight_difference(val):
           """Color code the difference column"""
-          if isinstance(val, (int, float)):
+          if isinstance(val, (int, float)) and pd.notna(val):
               if val < 0:
                   return 'background-color: lightgreen'
               elif val > 0:
@@ -903,7 +900,7 @@ with tab5:
 
       def highlight_net_benefit(val):
           """Color code the net benefit column"""
-          if isinstance(val, (int, float)):
+          if isinstance(val, (int, float)) and pd.notna(val):
               if val > 0:
                   return 'background-color: lightgreen'
               elif val < 0:
@@ -914,7 +911,10 @@ with tab5:
       st.dataframe(styled_df, use_container_width=True)
 
       # Summary of entered quotes
-      active_quotes = edited_df[(edited_df['Closing Costs ($)'] > 0) & (edited_df['Actual Rate Offered (%)'] > 0)]
+      active_quotes = edited_df[(pd.notna(edited_df['Closing Costs ($)'])) &
+                               (edited_df['Closing Costs ($)'] > 0) &
+                               (pd.notna(edited_df['Actual Rate Offered (%)'])) &
+                               (edited_df['Actual Rate Offered (%)'] > 0)]
 
       if len(active_quotes) > 0:
           st.markdown("### Quote Analysis")
@@ -948,406 +948,589 @@ with tab5:
       st.markdown("---")
       st.subheader("📈 Detailed Cash Flow Comparison")
 
-      # Get selected rows
-      selected_rows = edited_df[edited_df['Select'] & (edited_df['Closing Costs ($)'] > 0) & (edited_df['Actual Rate Offered (%)'] > 0)]
+      # Select which rows to compare
+      if len(active_quotes) > 0:
+          st.markdown("### Select Scenarios to Compare")
 
-      if len(selected_rows) > 0:
-          # Input parameters for calculations
-          st.markdown("### Analysis Parameters")
-          col1p, col2p, col3p, col4p = st.columns(4)
+          # Create checkboxes for each active quote
+          selected_indices = []
+          for idx, row in active_quotes.iterrows():
+              rate = row['Actual Rate Offered (%)']
+              cost = row['Closing Costs ($)']
+              if st.checkbox(f"Rate: {rate:.3f}%, Costs: ${cost:,.0f}", key=f"select_{idx}"):
+                  selected_indices.append(idx)
 
-          with col1p:
-              comp_invest_rate = st.number_input(
-                  "Investment Rate (%)",
-                  min_value=0.0,
-                  max_value=20.0,
-                  value=rho*100,
-                  step=0.5,
-                  key="comp_invest",
-                  help="Annual return on invested payment savings"
-              ) / 100
+          if len(selected_indices) > 0:
+              # Input parameters for calculations
+              st.markdown("### Analysis Parameters")
+              col1p, col2p, col3p, col4p = st.columns(4)
 
-          with col2p:
-              comp_new_term = st.number_input(
-                  "New Loan Term (years)",
-                  min_value=15,
-                  max_value=30,
-                  value=30,
-                  step=5,
-                  key="comp_term",
-                  help="Term for new refinanced loans"
-              )
+              with col1p:
+                  comp_invest_rate = st.number_input(
+                      "Investment Rate (%)",
+                      min_value=0.0,
+                      max_value=20.0,
+                      value=rho*100,
+                      step=0.5,
+                      key="comp_invest",
+                      help="Annual return on invested payment savings"
+                  ) / 100
 
-          with col3p:
-              comp_finance_costs = st.checkbox(
-                  "Finance costs in loan",
-                  value=True,
-                  key="comp_finance",
-                  help="Roll closing costs into the new loan"
-              )
+              with col2p:
+                  comp_new_term = st.number_input(
+                      "New Loan Term (years)",
+                      min_value=15,
+                      max_value=30,
+                      value=30,
+                      step=5,
+                      key="comp_term",
+                      help="Term for new refinanced loans"
+                  )
 
-          with col4p:
-              comp_include_taxes = st.checkbox(
-                  "Include tax effects",
-                  value=True,
-                  key="comp_taxes",
-                  help="Account for mortgage interest deduction"
-              )
+              with col3p:
+                  comp_finance_costs = st.checkbox(
+                      "Finance costs in loan",
+                      value=True,
+                      key="comp_finance",
+                      help="Roll closing costs into the new loan"
+                  )
 
-          # Helper functions
-          def payment(principal, monthly_rate, n_months):
-              """Level payment on an amortizing loan."""
-              if monthly_rate == 0:
-                  return principal / n_months
-              denom = 1.0 - (1.0 + monthly_rate) ** (-n_months)
-              return principal * monthly_rate / denom
+              with col4p:
+                  comp_include_taxes = st.checkbox(
+                      "Include tax effects",
+                      value=True,
+                      key="comp_taxes",
+                      help="Account for mortgage interest deduction"
+                  )
 
-          def compute_scenario_history(rate, closing_costs, label):
-              """Compute full history for one refinance scenario"""
-              n_old = int(round(Gamma * 12))
-              n_new = int(round(comp_new_term * 12))
-              horizon = max(n_old, n_new)
-              gamma_month = n_old
+              # Helper functions
+              def payment(principal, monthly_rate, n_months):
+                  """Level payment on an amortizing loan."""
+                  if monthly_rate == 0:
+                      return principal / n_months
+                  denom = 1.0 - (1.0 + monthly_rate) ** (-n_months)
+                  return principal * monthly_rate / denom
 
-              r_old = i0 / 12.0
-              r_new = rate / 12.0
-              r_inv = comp_invest_rate / 12.0
+              def compute_scenario_history(rate, closing_costs, label, original_term_months=None):
+                  """Compute full history for one refinance scenario"""
+                  # If original_term_months is provided, use it for the old loan
+                  if original_term_months is None:
+                      n_old = int(round(Gamma * 12))
+                  else:
+                      n_old = original_term_months
 
-              old_principal = M
-              if comp_finance_costs:
-                  new_principal = M + closing_costs
-              else:
-                  new_principal = M
+                  n_new = int(round(comp_new_term * 12))
+                  horizon = max(n_old, n_new)
+                  gamma_month = int(round(Gamma * 12))  # Gamma is always based on remaining years
 
-              pmt_old = payment(old_principal, r_old, n_old)
-              pmt_new = payment(new_principal, r_new, n_new)
+                  r_old = i0 / 12.0
+                  r_new = rate / 12.0
+                  r_inv = comp_invest_rate / 12.0
 
-              bal_old = old_principal
-              bal_new = new_principal
-              inv_bal = 0.0
-              opt1_sav = 0.0
-              opt2_sav = 0.0
-              inv_bal_at_gamma = None
+                  old_principal = M
+                  if comp_finance_costs:
+                      new_principal = M + closing_costs
+                  else:
+                      new_principal = M
 
-              history = []
+                  pmt_old = payment(old_principal, r_old, n_old)
+                  pmt_new = payment(new_principal, r_new, n_new)
 
-              for t in range(1, horizon + 1):
-                  # Old loan
-                  if t <= n_old and bal_old > 0:
-                      interest_old = r_old * bal_old
-                      principal_old = pmt_old - interest_old
-                      bal_old = max(0.0, bal_old - principal_old)
-                      if comp_include_taxes:
-                          p_old_t = pmt_old - (interest_old * tau)
-                          p_old_t_nominal = pmt_old
-                          tax_benefit_old = interest_old * tau
+                  bal_old = old_principal
+                  bal_new = new_principal
+                  inv_bal = 0.0
+                  opt1_sav = 0.0
+                  opt2_sav = 0.0
+                  inv_bal_at_gamma = None
+
+                  history = []
+                  amort_history = []
+
+                  for t in range(1, horizon + 1):
+                      # Old loan
+                      if t <= n_old and bal_old > 0:
+                          interest_old = r_old * bal_old
+                          principal_old = pmt_old - interest_old
+                          bal_old = max(0.0, bal_old - principal_old)
+                          if comp_include_taxes:
+                              p_old_t = pmt_old - (interest_old * tau)
+                              p_old_t_nominal = pmt_old
+                              tax_benefit_old = interest_old * tau
+                          else:
+                              p_old_t = pmt_old
+                              p_old_t_nominal = pmt_old
+                              tax_benefit_old = 0
                       else:
-                          p_old_t = pmt_old
-                          p_old_t_nominal = pmt_old
-                          tax_benefit_old = 0
-                  else:
-                      p_old_t = 0.0
-                      p_old_t_nominal = 0.0
-                      bal_old = 0.0
-                      interest_old = 0.0
-                      tax_benefit_old = 0.0
+                          p_old_t = 0.0
+                          p_old_t_nominal = 0.0
+                          bal_old = 0.0
+                          interest_old = 0.0
+                          principal_old = 0.0
+                          tax_benefit_old = 0.0
 
-                  # New loan
-                  if t <= n_new and bal_new > 0:
-                      interest_new = r_new * bal_new
-                      principal_new = pmt_new - interest_new
-                      bal_new = max(0.0, bal_new - principal_new)
-                      if comp_include_taxes:
-                          p_new_t = pmt_new - (interest_new * tau)
-                          p_new_t_nominal = pmt_new
-                          tax_benefit_new = interest_new * tau
+                      # New loan
+                      if t <= n_new and bal_new > 0:
+                          interest_new = r_new * bal_new
+                          principal_new = pmt_new - interest_new
+                          bal_new = max(0.0, bal_new - principal_new)
+                          if comp_include_taxes:
+                              p_new_t = pmt_new - (interest_new * tau)
+                              p_new_t_nominal = pmt_new
+                              tax_benefit_new = interest_new * tau
+                          else:
+                              p_new_t = pmt_new
+                              p_new_t_nominal = pmt_new
+                              tax_benefit_new = 0
                       else:
-                          p_new_t = pmt_new
-                          p_new_t_nominal = pmt_new
-                          tax_benefit_new = 0
-                  else:
-                      p_new_t = 0.0
-                      p_new_t_nominal = 0.0
-                      bal_new = 0.0
-                      interest_new = 0.0
-                      tax_benefit_new = 0.0
+                          p_new_t = 0.0
+                          p_new_t_nominal = 0.0
+                          bal_new = 0.0
+                          interest_new = 0.0
+                          principal_new = 0.0
+                          tax_benefit_new = 0.0
 
-                  # Payment savings
-                  pmt_sav_t = p_old_t - p_new_t
+                      # Payment savings
+                      pmt_sav_t = p_old_t - p_new_t
 
-                  # Calculate total advantage based on gamma
-                  if t < gamma_month:
-                      inv_bal = inv_bal * (1.0 + r_inv) + pmt_sav_t
-                      balance_adv = bal_old - bal_new
-                      total_adv = inv_bal + balance_adv
+                      # Calculate total advantage based on gamma - FIXED LOGIC
+                      if t < gamma_month:
+                          inv_bal = inv_bal * (1.0 + r_inv) + pmt_sav_t
+                          balance_adv = bal_old - bal_new
+                          total_adv = inv_bal + balance_adv
 
-                      # Components for hover
-                      calculation_parts = {
-                          'inv_bal_prev': inv_bal - pmt_sav_t,
-                          'inv_interest': (inv_bal - pmt_sav_t) * r_inv,
-                          'pmt_sav': pmt_sav_t,
-                          'inv_bal': inv_bal,
-                          'bal_old': bal_old,
-                          'bal_new': bal_new,
-                          'balance_adv': balance_adv,
-                          'total_adv': total_adv,
-                          'formula': f"({inv_bal:.2f} + {balance_adv:.2f})"
+                          # Components for hover
+                          calculation_parts = {
+                              'inv_bal_prev': inv_bal - pmt_sav_t,
+                              'inv_interest': (inv_bal - pmt_sav_t) * r_inv,
+                              'pmt_sav': pmt_sav_t,
+                              'inv_bal': inv_bal,
+                              'bal_old': bal_old,
+                              'bal_new': bal_new,
+                              'balance_adv': balance_adv,
+                              'total_adv': total_adv,
+                              'formula': f"({inv_bal:.2f} + {balance_adv:.2f})"
+                          }
+
+                      elif t == gamma_month:
+                          inv_bal = inv_bal * (1.0 + r_inv) + pmt_sav_t
+                          inv_bal_at_gamma = inv_bal
+                          opt2_sav = inv_bal_at_gamma
+                          opt1_sav = 0.0
+                          balance_adv = bal_old - bal_new
+                          total_adv = inv_bal + balance_adv
+
+                          calculation_parts = {
+                              'inv_bal_at_gamma': inv_bal_at_gamma,
+                              'bal_new': bal_new,
+                              'total_adv': total_adv,
+                              'formula': f"Gamma point: {inv_bal_at_gamma:.2f} + {balance_adv:.2f}"
+                          }
+
+                      else:
+                          # After gamma - FIXED: Continue to contribute payment savings to Option 2
+                          opt1_sav_prev = opt1_sav
+                          opt1_sav = opt1_sav * (1.0 + r_inv) + pmt_old
+
+                          opt2_sav_prev = opt2_sav
+                          # FIXED: Option 2 continues to receive the benefit of lower payments
+                          # If still paying new loan, add the payment savings
+                          if p_new_t > 0:
+                              opt2_sav = opt2_sav * (1.0 + r_inv) + (pmt_old - p_new_t)
+                          else:
+                              # If new loan is paid off, can invest the full old payment amount
+                              opt2_sav = opt2_sav * (1.0 + r_inv) + pmt_old
+
+                          # FIXED: More accurate comparison
+                          # Option 1: Just investing the old payment
+                          # Option 2: Previous savings + continued benefit from lower/no payment
+                          total_adv = opt2_sav - opt1_sav
+
+                          calculation_parts = {
+                              'opt1_sav_prev': opt1_sav_prev,
+                              'opt1_interest': opt1_sav_prev * r_inv,
+                              'pmt_old': pmt_old,
+                              'opt1_sav': opt1_sav,
+                              'opt2_sav_prev': opt2_sav_prev,
+                              'opt2_interest': opt2_sav_prev * r_inv,
+                              'opt2_contribution': pmt_old - p_new_t if p_new_t > 0 else pmt_old,
+                              'opt2_sav': opt2_sav,
+                              'bal_new': bal_new,
+                              'total_adv': total_adv,
+                              'formula': f"{opt2_sav:.2f} - {opt1_sav:.2f}"
+                          }
+
+                      # Store amortization data
+                      amort_rec = {
+                          "month": t,
+                          "old_payment": p_old_t_nominal,
+                          "old_principal": principal_old,
+                          "old_interest": interest_old,
+                          "old_balance": bal_old,
+                          "new_payment": p_new_t_nominal,
+                          "new_principal": principal_new,
+                          "new_interest": interest_new,
+                          "new_balance": bal_new
                       }
+                      amort_history.append(amort_rec)
 
-                  elif t == gamma_month:
-                      inv_bal = inv_bal * (1.0 + r_inv) + pmt_sav_t
-                      inv_bal_at_gamma = inv_bal
-                      opt2_sav = inv_bal_at_gamma
-                      opt1_sav = 0.0
-                      balance_adv = bal_old - bal_new
-                      total_adv = inv_bal + balance_adv
-
-                      calculation_parts = {
-                          'inv_bal_at_gamma': inv_bal_at_gamma,
-                          'bal_new': bal_new,
-                          'total_adv': total_adv,
-                          'formula': f"Gamma point: {inv_bal_at_gamma:.2f} + {balance_adv:.2f}"
+                      rec = {
+                          "month": t,
+                          "p_old": p_old_t,
+                          "p_old_nominal": p_old_t_nominal,
+                          "p_new": p_new_t,
+                          "p_new_nominal": p_new_t_nominal,
+                          "pmt_sav_t": pmt_sav_t,
+                          "inv_bal": inv_bal if t <= gamma_month else opt2_sav,
+                          "opt1_sav": opt1_sav,
+                          "bal_old": bal_old,
+                          "bal_new": bal_new,
+                          "total_adv": total_adv,
+                          "interest_old": interest_old,
+                          "interest_new": interest_new,
+                          "tax_benefit_old": tax_benefit_old,
+                          "tax_benefit_new": tax_benefit_new,
+                          "calculation_parts": calculation_parts,
+                          "label": label
                       }
+                      history.append(rec)
 
+                  return history, amort_history, pmt_old, pmt_new, gamma_month
+
+              # Compute histories for all selected scenarios
+              all_histories = []
+              all_amort_histories = []
+              colors = ['blue', 'red', 'green', 'purple', 'orange', 'brown']
+
+              for idx, row_idx in enumerate(selected_indices):
+                  row = active_quotes.loc[row_idx]
+                  rate = row['Actual Rate Offered (%)'] / 100
+                  costs = row['Closing Costs ($)']
+                  label = f"Rate: {row['Actual Rate Offered (%)']:.3f}%, Costs: ${costs:,.0f}"
+
+                  history, amort_history, _, _, gamma = compute_scenario_history(rate, costs, label)
+                  all_histories.append((history, colors[idx % len(colors)], label))
+                  all_amort_histories.append((amort_history, label))
+
+              # Create the Net Gain chart
+              st.markdown("### Net Gain Comparison Chart")
+              fig1 = go.Figure()
+
+              for history, color, label in all_histories:
+                  months = [rec["month"] for rec in history]
+                  net_gains = [rec["total_adv"] for rec in history]
+
+                  # Create hover text with calculation details
+                  hover_texts = []
+                  for rec in history:
+                      t = rec["month"]
+                      parts = rec["calculation_parts"]
+
+                      if t < gamma:
+                          hover_text = f"""<b>Month {t} - {label}</b><br>
+                          <b>Net Gain Calculation:</b><br>
+                          Investment Balance + Balance Advantage<br>
+                          = {parts['inv_bal']:.2f} + {parts['balance_adv']:.2f}<br>
+                          = <b>${rec['total_adv']:.2f}</b><br><br>
+
+                          <b>Investment Balance Detail:</b><br>
+                          Previous Balance: ${parts['inv_bal_prev']:.2f}<br>
+                          Interest Earned: ${parts['inv_interest']:.2f}<br>
+                          Payment Savings: ${parts['pmt_sav']:.2f}<br>
+                          New Balance: ${parts['inv_bal']:.2f}<br><br>
+
+                          <b>Loan Balances:</b><br>
+                          Old Loan: ${parts['bal_old']:.2f}<br>
+                          New Loan: ${parts['bal_new']:.2f}<br>
+                          Difference: ${parts['balance_adv']:.2f}"""
+
+                      elif t == gamma:
+                          hover_text = f"""<b>Month {t} - GAMMA POINT - {label}</b><br>
+                          <b>Net Gain: ${rec['total_adv']:.2f}</b><br>
+                          Investment at Gamma: ${parts['inv_bal_at_gamma']:.2f}<br>
+                          Remaining New Balance: ${parts['bal_new']:.2f}"""
+
+                      else:
+                          hover_text = f"""<b>Month {t} - POST GAMMA - {label}</b><br>
+                          <b>Net Gain Calculation:</b><br>
+                          Option 2 Savings - Option 1 Savings<br>
+                          = {parts['opt2_sav']:.2f} - {parts['opt1_sav']:.2f}<br>
+                          = <b>${rec['total_adv']:.2f}</b><br><br>
+
+                          <b>Option 1 (No Refi) Detail:</b><br>
+                          Previous: ${parts['opt1_sav_prev']:.2f}<br>
+                          Interest: ${parts['opt1_interest']:.2f}<br>
+                          Old Payment Invested: ${parts['pmt_old']:.2f}<br>
+                          New Total: ${parts['opt1_sav']:.2f}<br><br>
+
+                          <b>Option 2 (Did Refi) Detail:</b><br>
+                          Previous: ${parts['opt2_sav_prev']:.2f}<br>
+                          Interest: ${parts['opt2_interest']:.2f}<br>
+                          Contribution: ${parts['opt2_contribution']:.2f}<br>
+                          New Total: ${parts['opt2_sav']:.2f}<br>
+                          Remaining Loan: ${parts['bal_new']:.2f}"""
+
+                      hover_texts.append(hover_text)
+
+                  fig1.add_trace(go.Scatter(
+                      x=months,
+                      y=net_gains,
+                      mode='lines+markers',
+                      name=label,
+                      line=dict(width=2, color=color),
+                      marker=dict(size=4),
+                      hovertemplate='%{text}<extra></extra>',
+                      text=hover_texts
+                  ))
+
+              # Add reference lines
+              fig1.add_hline(y=0, line_dash="dash", line_color="gray", opacity=0.5)
+              fig1.add_vline(x=gamma, line_dash="dash", line_color="red", opacity=0.5,
+                            annotation_text=f"Gamma ({gamma} mo)")
+
+              fig1.update_layout(
+                  title="Net Gain Comparison - Hover for Detailed Calculations",
+                  xaxis_title="Month",
+                  yaxis_title="Net Gain ($)",
+                  height=600,
+                  hovermode='closest'
+              )
+
+              st.plotly_chart(fig1, use_container_width=True)
+
+              # Create component breakdown chart
+              st.markdown("### Component Breakdown")
+
+              # Show component charts for the first selected scenario
+              first_history = all_histories[0][0]
+              first_label = all_histories[0][2]
+
+              months = [rec["month"] for rec in first_history]
+
+              # Extract component data
+              inv_bals = []
+              opt1_savs = []
+              opt2_savs = []
+              bal_olds = [rec["bal_old"] for rec in first_history]
+              bal_news = [rec["bal_new"] for rec in first_history]
+
+              for rec in first_history:
+                  if rec["month"] <= gamma:
+                      inv_bals.append(rec["inv_bal"])
+                      opt1_savs.append(0)
+                      opt2_savs.append(0)
                   else:
-                      # After gamma
-                      opt1_sav_prev = opt1_sav
-                      opt1_sav = opt1_sav * (1.0 + r_inv) + pmt_old
+                      inv_bals.append(0)  # Not used after gamma
+                      opt1_savs.append(rec["opt1_sav"])
+                      opt2_savs.append(rec["inv_bal"])  # This is actually opt2_sav after gamma
 
-                      opt2_sav_prev = opt2_sav
-                      opt2_sav = opt2_sav * (1.0 + r_inv)
+              fig2 = go.Figure()
 
-                      total_adv = (opt2_sav - bal_new) - opt1_sav
-
-                      calculation_parts = {
-                          'opt1_sav_prev': opt1_sav_prev,
-                          'opt1_interest': opt1_sav_prev * r_inv,
-                          'pmt_old': pmt_old,
-                          'opt1_sav': opt1_sav,
-                          'opt2_sav_prev': opt2_sav_prev,
-                          'opt2_interest': opt2_sav_prev * r_inv,
-                          'opt2_sav': opt2_sav,
-                          'bal_new': bal_new,
-                          'total_adv': total_adv,
-                          'formula': f"({opt2_sav:.2f} - {bal_new:.2f}) - {opt1_sav:.2f}"
-                      }
-
-                  rec = {
-                      "month": t,
-                      "p_old": p_old_t,
-                      "p_old_nominal": p_old_t_nominal,
-                      "p_new": p_new_t,
-                      "p_new_nominal": p_new_t_nominal,
-                      "pmt_sav_t": pmt_sav_t,
-                      "inv_bal": inv_bal if t <= gamma_month else opt2_sav,
-                      "opt1_sav": opt1_sav,
-                      "bal_old": bal_old,
-                      "bal_new": bal_new,
-                      "total_adv": total_adv,
-                      "interest_old": interest_old,
-                      "interest_new": interest_new,
-                      "tax_benefit_old": tax_benefit_old,
-                      "tax_benefit_new": tax_benefit_new,
-                      "calculation_parts": calculation_parts,
-                      "label": label
-                  }
-                  history.append(rec)
-
-              return history, pmt_old, pmt_new, gamma_month
-
-          # Compute histories for all selected scenarios
-          all_histories = []
-          colors = ['blue', 'red', 'green', 'purple', 'orange', 'brown']
-
-          for idx, (row_idx, row) in enumerate(selected_rows.iterrows()):
-              rate = row['Actual Rate Offered (%)'] / 100
-              costs = row['Closing Costs ($)']
-              label = f"Rate: {row['Actual Rate Offered (%)']:.3f}%, Costs: ${costs:,.0f}"
-
-              history, _, _, gamma = compute_scenario_history(rate, costs, label)
-              all_histories.append((history, colors[idx % len(colors)], label))
-
-          # Create the Net Gain chart
-          st.markdown("### Net Gain Comparison Chart")
-          fig1 = go.Figure()
-
-          for history, color, label in all_histories:
-              months = [rec["month"] for rec in history]
-              net_gains = [rec["total_adv"] for rec in history]
-
-              # Create hover text with calculation details
-              hover_texts = []
-              for rec in history:
-                  t = rec["month"]
-                  parts = rec["calculation_parts"]
-
-                  if t < gamma:
-                      hover_text = f"""<b>Month {t} - {label}</b><br>
-                      <b>Net Gain Calculation:</b><br>
-                      Investment Balance + Balance Advantage<br>
-                      = {parts['inv_bal']:.2f} + {parts['balance_adv']:.2f}<br>
-                      = <b>${rec['total_adv']:.2f}</b><br><br>
-
-                      <b>Investment Balance Detail:</b><br>
-                      Previous Balance: ${parts['inv_bal_prev']:.2f}<br>
-                      Interest Earned: ${parts['inv_interest']:.2f}<br>
-                      Payment Savings: ${parts['pmt_sav']:.2f}<br>
-                      New Balance: ${parts['inv_bal']:.2f}<br><br>
-
-                      <b>Loan Balances:</b><br>
-                      Old Loan: ${parts['bal_old']:.2f}<br>
-                      New Loan: ${parts['bal_new']:.2f}<br>
-                      Difference: ${parts['balance_adv']:.2f}"""
-
-                  elif t == gamma:
-                      hover_text = f"""<b>Month {t} - GAMMA POINT - {label}</b><br>
-                      <b>Net Gain: ${rec['total_adv']:.2f}</b><br>
-                      Investment at Gamma: ${parts['inv_bal_at_gamma']:.2f}<br>
-                      Remaining New Balance: ${parts['bal_new']:.2f}"""
-
-                  else:
-                      hover_text = f"""<b>Month {t} - POST GAMMA - {label}</b><br>
-                      <b>Net Gain Calculation:</b><br>
-                      (Option 2 - New Balance) - Option 1<br>
-                      = ({parts['opt2_sav']:.2f} - {parts['bal_new']:.2f}) - {parts['opt1_sav']:.2f}<br>
-                      = <b>${rec['total_adv']:.2f}</b><br><br>
-
-                      <b>Option 1 (No Refi) Detail:</b><br>
-                      Previous: ${parts['opt1_sav_prev']:.2f}<br>
-                      Interest: ${parts['opt1_interest']:.2f}<br>
-                      Old Payment: ${parts['pmt_old']:.2f}<br>
-                      New Total: ${parts['opt1_sav']:.2f}<br><br>
-
-                      <b>Option 2 (Did Refi) Detail:</b><br>
-                      Previous: ${parts['opt2_sav_prev']:.2f}<br>
-                      Interest: ${parts['opt2_interest']:.2f}<br>
-                      New Total: ${parts['opt2_sav']:.2f}<br>
-                      Remaining Loan: ${parts['bal_new']:.2f}"""
-
-                  hover_texts.append(hover_text)
-
-              fig1.add_trace(go.Scatter(
+              # Add traces for each component
+              fig2.add_trace(go.Scatter(
                   x=months,
-                  y=net_gains,
-                  mode='lines+markers',
-                  name=label,
-                  line=dict(width=2, color=color),
-                  marker=dict(size=4),
-                  hovertemplate='%{text}<extra></extra>',
-                  text=hover_texts
+                  y=bal_olds,
+                  mode='lines',
+                  name='Old Loan Balance',
+                  line=dict(width=2, color='darkblue')
               ))
 
-          # Add reference lines
-          fig1.add_hline(y=0, line_dash="dash", line_color="gray", opacity=0.5)
-          fig1.add_vline(x=gamma, line_dash="dash", line_color="red", opacity=0.5,
-                        annotation_text=f"Gamma ({gamma} mo)")
+              fig2.add_trace(go.Scatter(
+                  x=months,
+                  y=bal_news,
+                  mode='lines',
+                  name='New Loan Balance',
+                  line=dict(width=2, color='darkred')
+              ))
 
-          fig1.update_layout(
-              title="Net Gain Comparison - Hover for Detailed Calculations",
-              xaxis_title="Month",
-              yaxis_title="Net Gain ($)",
-              height=600,
-              hovermode='closest'
-          )
+              fig2.add_trace(go.Scatter(
+                  x=months,
+                  y=inv_bals,
+                  mode='lines',
+                  name='Investment Balance (Pre-Gamma)',
+                  line=dict(width=2, color='green')
+              ))
 
-          st.plotly_chart(fig1, use_container_width=True)
+              fig2.add_trace(go.Scatter(
+                  x=months,
+                  y=opt1_savs,
+                  mode='lines',
+                  name='Option 1 Savings (Post-Gamma)',
+                  line=dict(width=2, color='orange')
+              ))
 
-          # Create component breakdown chart
-          st.markdown("### Component Breakdown")
+              fig2.add_trace(go.Scatter(
+                  x=months,
+                  y=opt2_savs,
+                  mode='lines',
+                  name='Option 2 Savings (Post-Gamma)',
+                  line=dict(width=2, color='lightgreen')
+              ))
 
-          # Show component charts for the first selected scenario
-          first_history = all_histories[0][0]
-          first_label = all_histories[0][2]
+              # Add gamma line
+              fig2.add_vline(x=gamma, line_dash="dash", line_color="red", opacity=0.5,
+                            annotation_text=f"Gamma ({gamma} mo)")
 
-          months = [rec["month"] for rec in first_history]
+              fig2.update_layout(
+                  title=f"Component Breakdown - {first_label}",
+                  xaxis_title="Month",
+                  yaxis_title="Amount ($)",
+                  height=600,
+                  hovermode='x unified'
+              )
 
-          # Extract component data
-          inv_bals = []
-          opt1_savs = []
-          bal_olds = [rec["bal_old"] for rec in first_history]
-          bal_news = [rec["bal_new"] for rec in first_history]
+              st.plotly_chart(fig2, use_container_width=True)
 
-          for rec in first_history:
-              if rec["month"] <= gamma:
-                  inv_bals.append(rec["inv_bal"])
-                  opt1_savs.append(0)
-              else:
-                  inv_bals.append(rec["calculation_parts"]["opt2_sav"])
-                  opt1_savs.append(rec["opt1_sav"])
+              # NEW: Amortization Tables Chart
+              st.markdown("### Amortization Tables")
 
-          fig2 = go.Figure()
+              # Compute full amortization for original loan from beginning
+              original_total_term = int(30 * 12)  # Assuming original was 30-year
+              months_elapsed = original_total_term - int(round(Gamma * 12))
 
-          # Add traces for each component
-          fig2.add_trace(go.Scatter(
-              x=months,
-              y=bal_olds,
-              mode='lines',
-              name='Old Loan Balance',
-              line=dict(width=2, color='darkblue'),
-              stackgroup='one'
-          ))
+              # Get original loan amortization from the beginning
+              original_history_full, _, _, _, _ = compute_scenario_history(
+                  i0,  # Original rate
+                  0,   # No closing costs for original
+                  "Original Loan Full Term",
+                  original_term_months=original_total_term
+              )
 
-          fig2.add_trace(go.Scatter(
-              x=months,
-              y=bal_news,
-              mode='lines',
-              name='New Loan Balance',
-              line=dict(width=2, color='darkred'),
-              stackgroup='two'
-          ))
+              # Create payment comparison chart
+              first_amort = all_amort_histories[0][0]
 
-          fig2.add_trace(go.Scatter(
-              x=months,
-              y=inv_bals,
-              mode='lines',
-              name='Investment/Option 2 Savings',
-              line=dict(width=2, color='green'),
-              stackgroup='three'
-          ))
+              fig3 = go.Figure()
 
-          fig2.add_trace(go.Scatter(
-              x=months,
-              y=opt1_savs,
-              mode='lines',
-              name='Option 1 Savings (Post-Gamma)',
-              line=dict(width=2, color='orange'),
-              stackgroup='four'
-          ))
+              # Add monthly payment traces
+              months_amort = list(range(1, len(first_amort) + 1))
+              old_payments = [rec["old_payment"] for rec in first_amort]
+              new_payments = [rec["new_payment"] for rec in first_amort]
 
-          # Add gamma line
-          fig2.add_vline(x=gamma, line_dash="dash", line_color="red", opacity=0.5,
-                        annotation_text=f"Gamma ({gamma} mo)")
+              fig3.add_trace(go.Scatter(
+                  x=months_amort,
+                  y=old_payments,
+                  mode='lines',
+                  name='Old Loan Payment',
+                  line=dict(width=2, color='blue')
+              ))
 
-          fig2.update_layout(
-              title=f"Component Breakdown - {first_label}",
-              xaxis_title="Month",
-              yaxis_title="Amount ($)",
-              height=600,
-              hovermode='x unified'
-          )
+              fig3.add_trace(go.Scatter(
+                  x=months_amort,
+                  y=new_payments,
+                  mode='lines',
+                  name='New Loan Payment',
+                  line=dict(width=2, color='red')
+              ))
 
-          st.plotly_chart(fig2, use_container_width=True)
+              fig3.add_vline(x=gamma, line_dash="dash", line_color='green', opacity=0.5,
+                            annotation_text=f"Gamma ({gamma} mo)")
 
-          # Summary statistics
-          st.markdown("### Summary Statistics")
+              fig3.update_layout(
+                  title="Monthly Payment Comparison",
+                  xaxis_title="Month",
+                  yaxis_title="Payment Amount ($)",
+                  height=400,
+                  hovermode='x unified'
+              )
 
-          summary_data = []
-          for history, _, label in all_histories:
-              final_gain = history[-1]["total_adv"]
-              max_gain = max(rec["total_adv"] for rec in history)
-              breakeven = next((rec["month"] for rec in history if rec["total_adv"] >= 0), None)
+              st.plotly_chart(fig3, use_container_width=True)
 
-              summary_data.append({
-                  'Scenario': label,
-                  'Final Net Gain': f"${final_gain:,.2f}",
-                  'Max Net Gain': f"${max_gain:,.2f}",
-                  'Breakeven Month': f"{breakeven} months" if breakeven else "Never"
-              })
+              # Create principal/interest breakdown
+              fig4 = go.Figure()
 
-          st.dataframe(pd.DataFrame(summary_data), use_container_width=True)
+              # Old loan principal and interest
+              old_principal = [rec["old_principal"] for rec in first_amort]
+              old_interest = [rec["old_interest"] for rec in first_amort]
+              new_principal = [rec["new_principal"] for rec in first_amort]
+              new_interest = [rec["new_interest"] for rec in first_amort]
 
+              fig4.add_trace(go.Scatter(
+                  x=months_amort,
+                  y=old_principal,
+                  mode='lines',
+                  name='Old Loan Principal',
+                  line=dict(width=2, color='darkblue'),
+                  stackgroup='old'
+              ))
+
+              fig4.add_trace(go.Scatter(
+                  x=months_amort,
+                  y=old_interest,
+                  mode='lines',
+                  name='Old Loan Interest',
+                  line=dict(width=2, color='lightblue'),
+                  stackgroup='old'
+              ))
+
+              fig4.add_trace(go.Scatter(
+                  x=months_amort,
+                  y=new_principal,
+                  mode='lines',
+                  name='New Loan Principal',
+                  line=dict(width=2, color='darkred'),
+                  stackgroup='new'
+              ))
+
+              fig4.add_trace(go.Scatter(
+                  x=months_amort,
+                  y=new_interest,
+                  mode='lines',
+                  name='New Loan Interest',
+                  line=dict(width=2, color='lightcoral'),
+                  stackgroup='new'
+              ))
+
+              fig4.update_layout(
+                  title="Principal vs Interest Breakdown",
+                  xaxis_title="Month",
+                  yaxis_title="Amount ($)",
+                  height=400,
+                  hovermode='x unified'
+              )
+
+              st.plotly_chart(fig4, use_container_width=True)
+
+              # Summary statistics
+              st.markdown("### Summary Statistics")
+
+              summary_data = []
+              for history, _, label in all_histories:
+                  final_gain = history[-1]["total_adv"]
+                  max_gain = max(rec["total_adv"] for rec in history)
+                  breakeven = next((rec["month"] for rec in history if rec["total_adv"] >= 0), None)
+
+                  summary_data.append({
+                      'Scenario': label,
+                      'Final Net Gain': f"${final_gain:,.2f}",
+                      'Max Net Gain': f"${max_gain:,.2f}",
+                      'Breakeven Month': f"{breakeven} months" if breakeven else "Never"
+                  })
+
+              st.dataframe(pd.DataFrame(summary_data), use_container_width=True)
+
+              # Display first few rows of amortization table
+              st.markdown("### Sample Amortization Schedule (First 12 months)")
+
+              amort_df_data = []
+              for i in range(min(12, len(first_amort))):
+                  rec = first_amort[i]
+                  amort_df_data.append({
+                      'Month': rec['month'],
+                      'Old Payment': f"${rec['old_payment']:,.2f}",
+                      'Old Principal': f"${rec['old_principal']:,.2f}",
+                      'Old Interest': f"${rec['old_interest']:,.2f}",
+                      'Old Balance': f"${rec['old_balance']:,.2f}",
+                      'New Payment': f"${rec['new_payment']:,.2f}",
+                      'New Principal': f"${rec['new_principal']:,.2f}",
+                      'New Interest': f"${rec['new_interest']:,.2f}",
+                      'New Balance': f"${rec['new_balance']:,.2f}"
+                  })
+
+              st.dataframe(pd.DataFrame(amort_df_data), use_container_width=True)
+
+          else:
+              st.info("Select one or more scenarios using the checkboxes above to see detailed comparison charts.")
       else:
-          st.info("Select one or more rows using the checkboxes to see detailed cash flow comparison charts.")
+          st.info("Enter closing costs and actual rates in the table above to begin analysis.")
 with tab6:
       st.header("📊 ENPV Analysis - Detailed Cash Flow Model")
 
