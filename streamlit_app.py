@@ -868,17 +868,31 @@ with tab5:
                   edited_df.loc[idx, 'Difference (%)'] = difference
 
       # Display with color coding
-      def highlight_difference(val):
-          """Color code the difference column"""
-          if isinstance(val, (int, float)):
-              if val < 0:
-                  return 'background-color: lightgreen'
-              elif val > 0:
-                  return 'background-color: lightcoral'
-          return ''
+      def highlight_cells(row):
+            """Color code the difference and net benefit columns"""
+            styles = [''] * len(row)
 
-      styled_df = edited_df.style.applymap(highlight_difference, subset=['Difference (%)'])
-      st.dataframe(styled_df, use_container_width=True)
+            # Find the index for difference column
+            if 'Difference (%)' in row.index:
+                diff_idx = row.index.get_loc('Difference (%)')
+                if isinstance(row['Difference (%)'], (int, float)):
+                    if row['Difference (%)'] < 0:
+                        styles[diff_idx] = 'background-color: lightgreen'
+                    elif row['Difference (%)'] > 0:
+                        styles[diff_idx] = 'background-color: lightcoral'
+
+            # Find the index for net benefit column
+            if 'Net Benefit ($)' in row.index:
+                benefit_idx = row.index.get_loc('Net Benefit ($)')
+                if isinstance(row['Net Benefit ($)'], (int, float)):
+                    if row['Net Benefit ($)'] > 0:
+                        styles[benefit_idx] = 'background-color: lightgreen'
+                    elif row['Net Benefit ($)'] < 0:
+                        styles[benefit_idx] = 'background-color: lightcoral'
+
+            return styles
+
+        styled_df = edited_df.style.apply(highlight_cells, axis=1)
 
       # Summary of entered quotes
       active_quotes = edited_df[(edited_df['Closing Costs ($)'] > 0) & (edited_df['Actual Rate Offered (%)'] > 0)]
