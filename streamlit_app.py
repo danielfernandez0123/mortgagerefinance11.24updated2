@@ -2052,12 +2052,12 @@ with tab7:
                 points_discount_rate,
                 points_lambda,
                 sigma,  # Using global sigma
-                abs(actual_cost),  # Use actual cost
+                abs(cost_above_par),  # Use cost above par
                 points_tax_rate
             )
 
             # The optimal threshold tells us how much the rate needs to drop
-            optimal_rate_drop = -temp_x_star * 10000  # Convert to basis points (multiply by 10000, not 100)
+            optimal_rate_drop = temp_x_star * 10000  # Convert to basis points (remove negative sign)
             actual_drop = (points_par_rate - rate / 100) * 10000  # Convert to basis points
             difference = actual_drop - optimal_rate_drop
 
