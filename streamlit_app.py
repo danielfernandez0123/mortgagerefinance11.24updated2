@@ -1899,7 +1899,8 @@ with tab7:
             min_value=0.0,
             max_value=20.0,
             value=6.0,
-            step=0.125,
+            step=0.001,  # Changed to allow 3 decimal places
+            format="%.3f",  # Display 3 decimal places
             help="The par rate"
         ) / 100
 
@@ -1914,19 +1915,6 @@ with tab7:
         )
 
     with col4:
-        points_tax_rate = st.number_input(
-            "Marginal Tax Rate (%)",
-            min_value=0.0,
-            max_value=50.0,
-            value=28.0,
-            step=1.0,
-            help="Your marginal tax rate"
-        ) / 100
-
-    # Second row with Cost at Par
-    col1b, col2b, col3b, col4b = st.columns(4)
-
-    with col1b:
         par_cost = st.number_input(
             "Cost at Par Rate ($)",
             min_value=-10000,
@@ -1935,6 +1923,19 @@ with tab7:
             step=100,
             help="The cost for the par rate"
         )
+
+    # Add tax rate to second row
+    col1b, col2b, col3b, col4b = st.columns(4)
+
+    with col1b:
+        points_tax_rate = st.number_input(
+            "Marginal Tax Rate (%)",
+            min_value=0.0,
+            max_value=50.0,
+            value=28.0,
+            step=1.0,
+            help="Your marginal tax rate"
+        ) / 100
 
     st.subheader("🔧 Economic Parameters")
 
@@ -2056,7 +2057,7 @@ with tab7:
             )
 
             # The optimal threshold tells us how much the rate needs to drop
-            optimal_rate_drop = -temp_x_star * 100  # Convert to percentage
+            optimal_rate_drop = -temp_x_star * 10000  # Convert to basis points (multiply by 10000, not 100)
             actual_drop = (points_par_rate - rate / 100) * 10000  # Convert to basis points
             difference = actual_drop - optimal_rate_drop
 
@@ -2075,6 +2076,27 @@ with tab7:
             })
 
         results_df = pd.DataFrame(results)
+
+        # Print calculation for the first row
+        if len(results) > 0:
+            first_row = results[0]
+            st.info(f"""
+            **Net Benefit Calculation for Rate {first_row['Rate (%)']}%:**
+
+            Formula: Net Benefit = (-x × M × (1-τ)) / (ρ + λ) - C
+
+            Where:
+            - x = Rate differential = {first_row['Rate (%)']/100:.5f} - {points_par_rate:.5f} = {first_row['Rate (%)']/100 - points_par_rate:.5f}
+            - M = Loan amount = ${points_loan_amount:,.0f}
+            - τ = Tax rate = {points_tax_rate:.2%}
+            - ρ = Discount rate = {points_discount_rate:.2%}
+            - λ = Lambda = {points_lambda:.4f}
+            - C = Actual cost = ${first_row['Actual Cost']:,.0f}
+
+            Calculation:
+            Net Benefit = (-{first_row['Rate (%)']/100 - points_par_rate:.5f} × ${points_loan_amount:,.0f} × {1-points_tax_rate:.2f}) / ({points_discount_rate:.3f} + {points_lambda:.4f}) - ${first_row['Actual Cost']:,.0f}
+            Net Benefit = ${first_row['Simple Net Benefit ($)']:,.2f}
+            """)
 
         # Custom styling function for the difference column
         def style_difference(val):
@@ -2296,6 +2318,35 @@ with tab7:
                     survival = survival * (1 - SMM)
 
                 st.metric("Expected NPV (ENPV)", f"${enpv:,.2f}")
+
+                # Calculate using Net Benefit formula for comparison
+                # Assuming Scenario 2 has lower rate (pays points), Scenario 1 has higher rate (takes credits)
+                if s2['Rate (%)'] < s1['Rate (%)']:
+                    # Net benefit of taking lower rate (S2) vs higher rate (S1)
+                    x_diff = s1['Rate (%)']/100 - s2['Rate (%)']/100  # Rate difference (positive)
+                    cost_diff = s2['Actual Cost ($)'] - s1['Actual Cost ($)']  # Cost difference
+
+                    net_benefit_formula = (x_diff * points_loan_amount * (1 - points_tax_rate)) / (points_discount_rate + points_lambda) - cost_diff
+
+                    st.info(f"""
+                    **ENPV Formula Check (Net Benefit of Lower Rate vs Higher Rate):**
+
+                    Formula: Net Benefit = (Δr × M × (1-τ)) / (ρ + λ) - ΔC
+
+                    Where:
+                    - Δr = Rate difference = {s1['Rate (%)']/100:.5f} - {s2['Rate (%)']/100:.5f} = {x_diff:.5f}
+                    - M = Loan amount = ${points_loan_amount:,.0f}
+                    - τ = Tax rate = {points_tax_rate:.2%}
+                    - ρ = Discount rate = {points_discount_rate:.2%}
+                    - λ = Lambda = {points_lambda:.4f}
+                    - ΔC = Cost difference = ${s2['Actual Cost ($)']:,.0f} - ${s1['Actual Cost ($)']:,.0f} = ${cost_diff:,.0f}
+
+                    Calculation:
+                    Net Benefit = ({x_diff:.5f} × ${points_loan_amount:,.0f} × {1-points_tax_rate:.2f}) / ({points_discount_rate:.3f} + {points_lambda:.4f}) - ${cost_diff:,.0f}
+                    Net Benefit = ${net_benefit_formula:,.2f}
+
+                    Note: ENPV includes mortality weighting and present value discounting, while this formula gives the simple net benefit.
+                    """)
 
                 if enpv > 0:
                     st.info(f"Based on ENPV analysis, **Scenario 1** ({s1['Rate (%)']}%) is preferable")
