@@ -881,8 +881,7 @@ with tab5:
       st.dataframe(styled_df, use_container_width=True)
 
       # Summary of entered quotes
-      active_quotes = edited_df[(edited_df['Closing Costs ($)'] > 0) & (edited_df['Actual Rate 
-  Offered (%)'] > 0)]
+      active_quotes = edited_df[(edited_df['Closing Costs ($)'] > 0) & (edited_df['Actual Rate Offered (%)'] > 0)]
 
       if len(active_quotes) > 0:
           st.markdown("### Quote Analysis")
