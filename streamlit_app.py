@@ -716,7 +716,7 @@ with tab5:
   temp_kappa, tau)
 
           # Calculate the optimal rate for this closing cost
-          optimal_rate = i0 + temp_x_star  # x_star is negative
+          optimal_rate = i0 - abs(temp_x_star)  # Subtract the rate drop
 
           results.append({
               'Closing Costs ($)': closing_cost,
