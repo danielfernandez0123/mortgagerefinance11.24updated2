@@ -1038,10 +1038,8 @@ with tab5:
 
                   bal_old = old_principal
                   bal_new = new_principal
-                  inv_bal = 0.0
                   opt1_sav = 0.0
                   opt2_sav = 0.0
-                  inv_bal_at_gamma = None
 
                   history = []
                   amort_history = []
@@ -1092,72 +1090,31 @@ with tab5:
                       # Payment savings
                       pmt_sav_t = p_old_t - p_new_t
 
-                      # Calculate total advantage based on gamma - FIXED LOGIC
-                      if t < gamma_month:
-                          inv_bal = inv_bal * (1.0 + r_inv) + pmt_sav_t
-                          balance_adv = bal_old - bal_new
-                          total_adv = inv_bal + balance_adv
+                      # Option 2 savings accumulation (throughout entire period)
+                      opt2_sav = opt2_sav * (1.0 + r_inv) + pmt_sav_t
 
-                          # Components for hover
-                          calculation_parts = {
-                              'inv_bal_prev': inv_bal - pmt_sav_t,
-                              'inv_interest': (inv_bal - pmt_sav_t) * r_inv,
-                              'pmt_sav': pmt_sav_t,
-                              'inv_bal': inv_bal,
-                              'bal_old': bal_old,
-                              'bal_new': bal_new,
-                              'balance_adv': balance_adv,
-                              'total_adv': total_adv,
-                              'formula': f"({inv_bal:.2f} + {balance_adv:.2f})"
-                          }
-
-                      elif t == gamma_month:
-                          inv_bal = inv_bal * (1.0 + r_inv) + pmt_sav_t
-                          inv_bal_at_gamma = inv_bal
-                          opt2_sav = inv_bal_at_gamma
-                          opt1_sav = 0.0
-                          balance_adv = bal_old - bal_new
-                          total_adv = inv_bal + balance_adv
-
-                          calculation_parts = {
-                              'inv_bal_at_gamma': inv_bal_at_gamma,
-                              'bal_new': bal_new,
-                              'total_adv': total_adv,
-                              'formula': f"Gamma point: {inv_bal_at_gamma:.2f} + {balance_adv:.2f}"
-                          }
-
-                      else:
-                          # After gamma - FIXED: Continue to contribute payment savings to Option 2
-                          opt1_sav_prev = opt1_sav
+                      # Option 1 savings (starts at gamma)
+                      if t > gamma_month:
+                          # After gamma, invest the old payment amount
                           opt1_sav = opt1_sav * (1.0 + r_inv) + pmt_old
 
-                          opt2_sav_prev = opt2_sav
-                          # FIXED: Option 2 continues to receive the benefit of lower payments
-                          # If still paying new loan, add the payment savings
-                          if p_new_t > 0:
-                              opt2_sav = opt2_sav * (1.0 + r_inv) + (pmt_old - p_new_t)
-                          else:
-                              # If new loan is paid off, can invest the full old payment amount
-                              opt2_sav = opt2_sav * (1.0 + r_inv) + pmt_old
+                      # Calculate net gain using consistent formula
+                      # Net Gain = Option2_Savings + (Old_Balance - New_Balance) - Option1_Savings
+                      balance_adv = bal_old - bal_new
+                      total_adv = opt2_sav + balance_adv - opt1_sav
 
-                          # FIXED: More accurate comparison
-                          # Option 1: Just investing the old payment
-                          # Option 2: Previous savings + continued benefit from lower/no payment
-                          total_adv = opt2_sav - opt1_sav
-
-                          calculation_parts = {
-                              'opt1_sav_prev': opt1_sav_prev,
-                              'opt1_interest': opt1_sav_prev * r_inv,
-                              'pmt_old': pmt_old,
-                              'opt1_sav': opt1_sav,
-                              'opt2_sav_prev': opt2_sav_prev,
-                              'opt2_interest': opt2_sav_prev * r_inv,
-                              'opt2_contribution': pmt_old - p_new_t if p_new_t > 0 else pmt_old,
-                              'opt2_sav': opt2_sav,
-                              'bal_new': bal_new,
-                              'total_adv': total_adv,
-                              'formula': f"{opt2_sav:.2f} - {opt1_sav:.2f}"
-                          }
+                      # Components for hover
+                      calculation_parts = {
+                          'opt2_sav': opt2_sav,
+                          'bal_old': bal_old,
+                          'bal_new': bal_new,
+                          'balance_adv': balance_adv,
+                          'opt1_sav': opt1_sav,
+                          'total_adv': total_adv,
+                          'pmt_sav': pmt_sav_t,
+                          'pmt_old': pmt_old,
+                          'formula': f"{opt2_sav:.2f} + ({bal_old:.2f} - {bal_new:.2f}) - {opt1_sav:.2f}"
+                      }
 
                       # Store amortization data
                       amort_rec = {
@@ -1180,7 +1137,7 @@ with tab5:
                           "p_new": p_new_t,
                           "p_new_nominal": p_new_t_nominal,
                           "pmt_sav_t": pmt_sav_t,
-                          "inv_bal": inv_bal if t <= gamma_month else opt2_sav,
+                          "opt2_sav": opt2_sav,
                           "opt1_sav": opt1_sav,
                           "bal_old": bal_old,
                           "bal_new": bal_new,
@@ -1225,49 +1182,38 @@ with tab5:
                       t = rec["month"]
                       parts = rec["calculation_parts"]
 
-                      if t < gamma:
+                      if t <= gamma:
                           hover_text = f"""<b>Month {t} - {label}</b><br>
                           <b>Net Gain Calculation:</b><br>
-                          Investment Balance + Balance Advantage<br>
-                          = {parts['inv_bal']:.2f} + {parts['balance_adv']:.2f}<br>
-                          = <b>${rec['total_adv']:.2f}</b><br><br>
+                          Option2_Savings + (Old_Balance - New_Balance) - Option1_Savings<br>
+                          = {parts['opt2_sav']:.2f} + ({parts['bal_old']:.2f} - {parts['bal_new']:.2f}) - {parts['opt1_sav']:.2f}<br>
+                          = {parts['opt2_sav']:.2f} + {parts['balance_adv']:.2f} - {parts['opt1_sav']:.2f}<br>
+                          = <b>${parts['total_adv']:.2f}</b><br><br>
 
-                          <b>Investment Balance Detail:</b><br>
-                          Previous Balance: ${parts['inv_bal_prev']:.2f}<br>
-                          Interest Earned: ${parts['inv_interest']:.2f}<br>
-                          Payment Savings: ${parts['pmt_sav']:.2f}<br>
-                          New Balance: ${parts['inv_bal']:.2f}<br><br>
-
-                          <b>Loan Balances:</b><br>
-                          Old Loan: ${parts['bal_old']:.2f}<br>
-                          New Loan: ${parts['bal_new']:.2f}<br>
-                          Difference: ${parts['balance_adv']:.2f}"""
-
-                      elif t == gamma:
-                          hover_text = f"""<b>Month {t} - GAMMA POINT - {label}</b><br>
-                          <b>Net Gain: ${rec['total_adv']:.2f}</b><br>
-                          Investment at Gamma: ${parts['inv_bal_at_gamma']:.2f}<br>
-                          Remaining New Balance: ${parts['bal_new']:.2f}"""
+                          <b>Details:</b><br>
+                          Option 2 Savings: ${parts['opt2_sav']:.2f}<br>
+                          Payment Savings This Month: ${parts['pmt_sav']:.2f}<br>
+                          Old Loan Balance: ${parts['bal_old']:.2f}<br>
+                          New Loan Balance: ${parts['bal_new']:.2f}<br>
+                          Balance Advantage: ${parts['balance_adv']:.2f}<br>
+                          Option 1 Savings: ${parts['opt1_sav']:.2f} (starts at gamma)"""
 
                       else:
                           hover_text = f"""<b>Month {t} - POST GAMMA - {label}</b><br>
                           <b>Net Gain Calculation:</b><br>
-                          Option 2 Savings - Option 1 Savings<br>
-                          = {parts['opt2_sav']:.2f} - {parts['opt1_sav']:.2f}<br>
-                          = <b>${rec['total_adv']:.2f}</b><br><br>
+                          Option2_Savings + (Old_Balance - New_Balance) - Option1_Savings<br>
+                          = {parts['opt2_sav']:.2f} + ({parts['bal_old']:.2f} - {parts['bal_new']:.2f}) - {parts['opt1_sav']:.2f}<br>
+                          = {parts['opt2_sav']:.2f} + {parts['balance_adv']:.2f} - {parts['opt1_sav']:.2f}<br>
+                          = <b>${parts['total_adv']:.2f}</b><br><br>
 
-                          <b>Option 1 (No Refi) Detail:</b><br>
-                          Previous: ${parts['opt1_sav_prev']:.2f}<br>
-                          Interest: ${parts['opt1_interest']:.2f}<br>
-                          Old Payment Invested: ${parts['pmt_old']:.2f}<br>
-                          New Total: ${parts['opt1_sav']:.2f}<br><br>
-
-                          <b>Option 2 (Did Refi) Detail:</b><br>
-                          Previous: ${parts['opt2_sav_prev']:.2f}<br>
-                          Interest: ${parts['opt2_interest']:.2f}<br>
-                          Contribution: ${parts['opt2_contribution']:.2f}<br>
-                          New Total: ${parts['opt2_sav']:.2f}<br>
-                          Remaining Loan: ${parts['bal_new']:.2f}"""
+                          <b>Details:</b><br>
+                          Option 2 Savings: ${parts['opt2_sav']:.2f}<br>
+                          Payment Savings This Month: ${parts['pmt_sav']:.2f}<br>
+                          Old Loan Balance: ${parts['bal_old']:.2f} (paid off)<br>
+                          New Loan Balance: ${parts['bal_new']:.2f}<br>
+                          Balance Advantage: ${parts['balance_adv']:.2f}<br>
+                          Option 1 Savings: ${parts['opt1_sav']:.2f}<br>
+                          Option 1 Monthly Investment: ${parts['pmt_old']:.2f}"""
 
                       hover_texts.append(hover_text)
 
@@ -1307,21 +1253,10 @@ with tab5:
               months = [rec["month"] for rec in first_history]
 
               # Extract component data
-              inv_bals = []
-              opt1_savs = []
-              opt2_savs = []
+              opt2_savs = [rec["opt2_sav"] for rec in first_history]
+              opt1_savs = [rec["opt1_sav"] for rec in first_history]
               bal_olds = [rec["bal_old"] for rec in first_history]
               bal_news = [rec["bal_new"] for rec in first_history]
-
-              for rec in first_history:
-                  if rec["month"] <= gamma:
-                      inv_bals.append(rec["inv_bal"])
-                      opt1_savs.append(0)
-                      opt2_savs.append(0)
-                  else:
-                      inv_bals.append(0)  # Not used after gamma
-                      opt1_savs.append(rec["opt1_sav"])
-                      opt2_savs.append(rec["inv_bal"])  # This is actually opt2_sav after gamma
 
               fig2 = go.Figure()
 
@@ -1344,9 +1279,9 @@ with tab5:
 
               fig2.add_trace(go.Scatter(
                   x=months,
-                  y=inv_bals,
+                  y=opt2_savs,
                   mode='lines',
-                  name='Investment Balance (Pre-Gamma)',
+                  name='Option 2 Savings (Refinance)',
                   line=dict(width=2, color='green')
               ))
 
@@ -1354,16 +1289,8 @@ with tab5:
                   x=months,
                   y=opt1_savs,
                   mode='lines',
-                  name='Option 1 Savings (Post-Gamma)',
+                  name='Option 1 Savings (No Refinance, Post-Gamma)',
                   line=dict(width=2, color='orange')
-              ))
-
-              fig2.add_trace(go.Scatter(
-                  x=months,
-                  y=opt2_savs,
-                  mode='lines',
-                  name='Option 2 Savings (Post-Gamma)',
-                  line=dict(width=2, color='lightgreen')
               ))
 
               # Add gamma line
