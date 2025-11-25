@@ -886,8 +886,7 @@ with tab5:
                 elif val > 0:
                     return 'background-color: lightcoral'
             return ''
-
-        def highlight_net_benefit(val):
+            def highlight_net_benefit(val):
             """Color code the net benefit column"""
             if isinstance(val, (int, float)):
                 if val > 0:
@@ -896,8 +895,7 @@ with tab5:
                     return 'background-color: lightcoral'
             return ''
 
-        styled_df = edited_df.style.applymap(highlight_difference, subset=['Difference 
-  (%)']).applymap(highlight_net_benefit, subset=['Net Benefit ($)'])
+        styled_df = edited_df.style.applymap(highlight_difference, subset=['Difference (%)']).applymap(highlight_net_benefit, subset=['Net Benefit ($)'])
       st.dataframe(styled_df, use_container_width=True)
 
 
