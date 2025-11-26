@@ -2371,60 +2371,6 @@ with tab8:
     """)
 
     # ===========================================
-    # SECTION 1: Value Matching Formula Display
-    # ===========================================
-    st.subheader("📐 Value Matching Condition (Theorem 2)")
-
-    st.markdown("""
-    At the optimal refinancing threshold x*, the following **value matching condition** holds:
-    """)
-
-    st.latex(r"R(x^*) = R(0) - C(M) - \frac{x^* \cdot M}{\rho + \lambda}")
-
-    st.markdown("""
-    Where:
-    - **R(x*)** = Option value at optimal threshold (value of refinancing option when you refinance)
-    - **R(0)** = Option value at x=0 (value of refinancing option right after refinancing)
-    - **C(M)** = Tax-adjusted refinancing cost = κ(M)/(1-τ)
-    - **x*** = Optimal rate differential (negative, since new rate < old rate)
-    - **M** = Mortgage balance
-    - **ρ** = Real discount rate
-    - **λ** = Expected real rate of mortgage repayment (includes moving, principal repayment, inflation)
-    """)
-
-    # Calculate and display all components
-    st.markdown("---")
-    st.markdown("### 🔢 Your Parameter Values")
-
-    col1f, col2f = st.columns(2)
-
-    with col1f:
-        st.markdown(f"""
-        **Input Parameters:**
-        - M (Mortgage Balance) = **${M:,.0f}**
-        - i₀ (Original Rate) = **{i0*100:.3f}%**
-        - ρ (Real Discount Rate) = **{rho*100:.2f}%**
-        - τ (Tax Rate) = **{tau*100:.1f}%**
-        - σ (Interest Rate Volatility) = **{sigma:.4f}**
-        - μ (Probability of Moving) = **{mu*100:.1f}%**
-        - π (Inflation Rate) = **{pi*100:.1f}%**
-        - Γ (Remaining Years) = **{Gamma} years**
-        """)
-
-    with col2f:
-        st.markdown(f"""
-        **Derived Parameters:**
-        - λ (Real Repayment Rate) = **{lambda_val:.4f}**
-          - = μ + i₀/(e^(i₀Γ) - 1) + π
-          - = {mu:.3f} + {i0:.3f}/(e^({i0:.3f}×{Gamma}) - 1) + {pi:.3f}
-        - κ(M) (Refinancing Cost) = **${kappa:,.0f}**
-        - C(M) = κ(M)/(1-τ) = **${C_M:,.0f}**
-        - ψ = √(2(ρ+λ))/σ = **{psi:.4f}**
-        - φ = 1 + ψ(ρ+λ)C(M)/M = **{phi:.4f}**
-        - x* (Optimal Threshold) = **{x_star:.6f}** ({x_star_bp:.0f} bps)
-        """)
-
-           # ===========================================
     # Value Matching Formula Verification
     # ===========================================
     st.markdown("---")
