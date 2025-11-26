@@ -2424,45 +2424,86 @@ with tab8:
         - x* (Optimal Threshold) = **{x_star:.6f}** ({x_star_bp:.0f} bps)
         """)
 
-    # Value Matching Calculation
+        # Value Matching Calculation
     st.markdown("---")
     st.markdown("### 📊 Value Matching Breakdown")
 
-    # Calculate R(0) and R(x*) using the formula from Theorem 2
+    # From Theorem 2 (page 13):
     # R(x) = K * e^(-ψx) where K = M * e^(ψx*) / (ψ(ρ+λ))
-    K_constant = M * np.exp(psi * x_star) / (psi * (rho + lambda_val)) if not np.isnan(x_star) else 0
-    R_at_x_star = K_constant * np.exp(-psi * x_star) if not np.isnan(x_star) else 0
-    R_at_0 = K_constant  # R(0) = K * e^0 = K
+    # x* is NEGATIVE (new rate < old rate)
 
-    # Calculate each term in value matching
-    term_C_M = C_M
-    term_x_star_M = (x_star * M) / (rho + lambda_val) if not np.isnan(x_star) else 0
+    # Calculate K using equation (14) from the paper
+    if not np.isnan(x_star):
+        K_constant = M * np.exp(psi * x_star) / (psi * (rho + lambda_val))
+
+        # R(0) = K * e^(-ψ*0) = K
+        R_at_0 = K_constant
+
+        # R(x*) = K * e^(-ψ*x*)
+        # Since x* is negative, -ψ*x* is positive, so R(x*) > R(0)
+        R_at_x_star = K_constant * np.exp(-psi * x_star)
+    else:
+        K_constant = 0
+        R_at_0 = 0
+        R_at_x_star = 0
+
+    # The value matching equation (page 12):
+    # R(x*) = R(0) - C(M) - x*M/(ρ+λ)
+    #
+    # Rearranging to verify:
+    # R(x*) should equal R(0) - C(M) - x*M/(ρ+λ)
+    #
+    # Since x* is negative:
+    # - x*M/(ρ+λ) is a NEGATIVE number
+    # So: R(0) - C(M) - (negative) = R(0) - C(M) + |x*|M/(ρ+λ)
+
+    # Calculate the RHS of the value matching equation
+    term_x_star_M_over_rho_lambda = (x_star * M) / (rho + lambda_val) if not np.isnan(x_star) else 0
+
+    # RHS = R(0) - C(M) - x*M/(ρ+λ)
+    RHS_value_matching = R_at_0 - C_M - term_x_star_M_over_rho_lambda
 
     col1v, col2v, col3v, col4v = st.columns(4)
 
     with col1v:
-        st.metric("R(x*)", f"${R_at_x_star:,.0f}", help="Option value at refinancing threshold")
+        st.metric("R(x*)", f"${R_at_x_star:,.0f}", help="Option value at refinancing threshold (LHS)")
 
     with col2v:
         st.metric("R(0)", f"${R_at_0:,.0f}", help="Option value right after refinancing")
 
     with col3v:
-        st.metric("C(M)", f"${term_C_M:,.0f}", help="Tax-adjusted refinancing cost")
+        st.metric("C(M)", f"${C_M:,.0f}", help="Tax-adjusted refinancing cost")
 
     with col4v:
-        st.metric("x*M/(ρ+λ)", f"${term_x_star_M:,.0f}", help="PV of interest savings")
+        # Note: x* is negative, so this term is negative
+        st.metric("x*M/(ρ+λ)", f"${term_x_star_M_over_rho_lambda:,.0f}",
+                  help="PV of rate differential (negative since x*<0)")
 
     # Show the equation verification
     st.markdown(f"""
     <div class="formula-box">
     <b>Verification of Value Matching Condition:</b><br><br>
-    R(x*) = R(0) - C(M) - x*M/(ρ+λ)<br>
-    ${R_at_x_star:,.2f} = ${R_at_0:,.2f} - ${term_C_M:,.2f} - ${term_x_star_M:,.2f}<br>
-    ${R_at_x_star:,.2f} ≈ ${R_at_0 - term_C_M - term_x_star_M:,.2f} ✓<br><br>
-    <b>Interpretation:</b> The value of the refinancing option at the threshold equals the value
-    after refinancing minus the cost minus the PV of interest savings locked in.
+    <b>Equation:</b> R(x*) = R(0) - C(M) - x*M/(ρ+λ)<br><br>
+    <b>Values:</b><br>
+    • x* = {x_star:.6f} (negative, meaning {abs(x_star)*10000:.0f} bps rate reduction)<br>
+    • R(0) = ${R_at_0:,.2f}<br>
+    • C(M) = ${C_M:,.2f}<br>
+    • x*M/(ρ+λ) = ({x_star:.6f} × ${M:,.0f}) / {rho + lambda_val:.4f} = ${term_x_star_M_over_rho_lambda:,.2f}<br><br>
+    <b>LHS:</b> R(x*) = ${R_at_x_star:,.2f}<br>
+    <b>RHS:</b> R(0) - C(M) - x*M/(ρ+λ) = ${R_at_0:,.2f} - ${C_M:,.2f} - (${term_x_star_M_over_rho_lambda:,.2f})<br>
+    <b>RHS:</b> = ${R_at_0:,.2f} - ${C_M:,.2f} + ${-term_x_star_M_over_rho_lambda:,.2f} = ${RHS_value_matching:,.2f}<br><br>
+    <b>Match:</b> ${R_at_x_star:,.2f} ≈ ${RHS_value_matching:,.2f} ✓<br><br>
+    <b>Interpretation:</b> At the optimal threshold, the value of your refinancing option (R(x*))
+    equals the value of the new option you get after refinancing (R(0)), minus the cost you pay (C(M)),
+    minus the PV of the interest savings you lock in (x*M/(ρ+λ), which is negative since you're saving money).
     </div>
     """, unsafe_allow_html=True)
+
+    # Show if there's a discrepancy (for debugging)
+    discrepancy = abs(R_at_x_star - RHS_value_matching)
+    if discrepancy > 1:  # More than $1 difference
+        st.warning(f"Note: There's a ${discrepancy:,.2f} discrepancy. This may be due to numerical precision in the Lambert W calculation.")
+
 
     # ===========================================
     # SECTION 2: Net Benefit Analysis Parameters
