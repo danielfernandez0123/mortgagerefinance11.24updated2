@@ -2424,85 +2424,111 @@ with tab8:
         - x* (Optimal Threshold) = **{x_star:.6f}** ({x_star_bp:.0f} bps)
         """)
 
-        # Value Matching Calculation
+           # ===========================================
+    # Value Matching Formula Verification
+    # ===========================================
     st.markdown("---")
-    st.markdown("### 📊 Value Matching Breakdown")
+    st.subheader("📐 Value Matching Condition (Theorem 2)")
 
-    # From Theorem 2 (page 13):
-    # R(x) = K * e^(-ψx) where K = M * e^(ψx*) / (ψ(ρ+λ))
-    # x* is NEGATIVE (new rate < old rate)
+    st.markdown("""
+    At the optimal refinancing threshold x*, the following **value matching condition** holds:
+    """)
 
-    # Calculate K using equation (14) from the paper
+    st.latex(r"R(x^*) = R(0) - C(M) - \frac{x^* \cdot M}{\rho + \lambda}")
+
+    st.markdown("""
+    Where:
+    - **R(x)** = Option value of being able to refinance = K × e^(-ψx)
+    - **R(0)** = Option value at x=0 (right after refinancing) = K
+    - **R(x*)** = Option value at threshold (about to refinance)
+    - **C(M)** = Tax-adjusted refinancing cost = κ/(1-τ)
+    - **x*** = Optimal threshold (negative, since new rate < old rate)
+    """)
+
+    # Calculate K and R values using equation (14) from page 13
+    # K = M * e^(ψx*) / (ψ(ρ+λ))
+    # R(x) = K * e^(-ψx)
+    # R(0) = K
+    # R(x*) = K * e^(-ψx*)
+
     if not np.isnan(x_star):
+        # K from equation (14)
         K_constant = M * np.exp(psi * x_star) / (psi * (rho + lambda_val))
 
-        # R(0) = K * e^(-ψ*0) = K
-        R_at_0 = K_constant
+        # R(0) = K (since e^0 = 1)
+        R_0 = K_constant
 
-        # R(x*) = K * e^(-ψ*x*)
-        # Since x* is negative, -ψ*x* is positive, so R(x*) > R(0)
-        R_at_x_star = K_constant * np.exp(-psi * x_star)
+        # R(x*) = K * e^(-ψx*)
+        # Since x* is negative, -ψx* is positive, so R(x*) > R(0)
+        R_x_star = K_constant * np.exp(-psi * x_star)
+
+        # The term x*M/(ρ+λ) - this is NEGATIVE since x* is negative
+        term_xM = (x_star * M) / (rho + lambda_val)
+
+        # RHS of value matching: R(0) - C(M) - x*M/(ρ+λ)
+        # Since x*M/(ρ+λ) is negative, subtracting it means ADDING
+        RHS = R_0 - C_M - term_xM
     else:
         K_constant = 0
-        R_at_0 = 0
-        R_at_x_star = 0
+        R_0 = 0
+        R_x_star = 0
+        term_xM = 0
+        RHS = 0
 
-    # The value matching equation (page 12):
-    # R(x*) = R(0) - C(M) - x*M/(ρ+λ)
-    #
-    # Rearranging to verify:
-    # R(x*) should equal R(0) - C(M) - x*M/(ρ+λ)
-    #
-    # Since x* is negative:
-    # - x*M/(ρ+λ) is a NEGATIVE number
-    # So: R(0) - C(M) - (negative) = R(0) - C(M) + |x*|M/(ρ+λ)
-
-    # Calculate the RHS of the value matching equation
-    term_x_star_M_over_rho_lambda = (x_star * M) / (rho + lambda_val) if not np.isnan(x_star) else 0
-
-    # RHS = R(0) - C(M) - x*M/(ρ+λ)
-    RHS_value_matching = R_at_0 - C_M - term_x_star_M_over_rho_lambda
+    # Display the values
+    st.markdown("### 📊 Value Matching Breakdown")
 
     col1v, col2v, col3v, col4v = st.columns(4)
 
     with col1v:
-        st.metric("R(x*)", f"${R_at_x_star:,.0f}", help="Option value at refinancing threshold (LHS)")
+        st.metric("K (constant)", f"${K_constant:,.0f}",
+                  help="K = M×e^(ψx*) / (ψ(ρ+λ))")
 
     with col2v:
-        st.metric("R(0)", f"${R_at_0:,.0f}", help="Option value right after refinancing")
+        st.metric("R(0)", f"${R_0:,.0f}",
+                  help="Option value right after refinancing = K")
 
     with col3v:
-        st.metric("C(M)", f"${C_M:,.0f}", help="Tax-adjusted refinancing cost")
+        st.metric("R(x*)", f"${R_x_star:,.0f}",
+                  help="Option value at threshold = K×e^(-ψx*)")
 
     with col4v:
-        # Note: x* is negative, so this term is negative
-        st.metric("x*M/(ρ+λ)", f"${term_x_star_M_over_rho_lambda:,.0f}",
-                  help="PV of rate differential (negative since x*<0)")
+        st.metric("C(M)", f"${C_M:,.0f}",
+                  help="Tax-adjusted refinancing cost")
 
-    # Show the equation verification
+    # Verification display
     st.markdown(f"""
     <div class="formula-box">
-    <b>Verification of Value Matching Condition:</b><br><br>
+    <b>Verification of Value Matching Condition (Page 12):</b><br><br>
     <b>Equation:</b> R(x*) = R(0) - C(M) - x*M/(ρ+λ)<br><br>
-    <b>Values:</b><br>
-    • x* = {x_star:.6f} (negative, meaning {abs(x_star)*10000:.0f} bps rate reduction)<br>
-    • R(0) = ${R_at_0:,.2f}<br>
-    • C(M) = ${C_M:,.2f}<br>
-    • x*M/(ρ+λ) = ({x_star:.6f} × ${M:,.0f}) / {rho + lambda_val:.4f} = ${term_x_star_M_over_rho_lambda:,.2f}<br><br>
-    <b>LHS:</b> R(x*) = ${R_at_x_star:,.2f}<br>
-    <b>RHS:</b> R(0) - C(M) - x*M/(ρ+λ) = ${R_at_0:,.2f} - ${C_M:,.2f} - (${term_x_star_M_over_rho_lambda:,.2f})<br>
-    <b>RHS:</b> = ${R_at_0:,.2f} - ${C_M:,.2f} + ${-term_x_star_M_over_rho_lambda:,.2f} = ${RHS_value_matching:,.2f}<br><br>
-    <b>Match:</b> ${R_at_x_star:,.2f} ≈ ${RHS_value_matching:,.2f} ✓<br><br>
-    <b>Interpretation:</b> At the optimal threshold, the value of your refinancing option (R(x*))
-    equals the value of the new option you get after refinancing (R(0)), minus the cost you pay (C(M)),
-    minus the PV of the interest savings you lock in (x*M/(ρ+λ), which is negative since you're saving money).
+    <b>Parameters:</b><br>
+    • x* = {x_star:.6f} ({abs(x_star)*10000:.0f} bps rate reduction)<br>
+    • ψ = {psi:.4f}<br>
+    • ρ + λ = {rho + lambda_val:.4f}<br>
+    • K = M×e^(ψx*) / (ψ(ρ+λ)) = ${K_constant:,.2f}<br><br>
+    <b>Option Values:</b><br>
+    • R(0) = K = ${R_0:,.2f}<br>
+    • R(x*) = K×e^(-ψx*) = {K_constant:,.2f} × e^(-{psi:.4f}×{x_star:.6f}) = ${R_x_star:,.2f}<br><br>
+    <b>Value Matching Check:</b><br>
+    • LHS: R(x*) = ${R_x_star:,.2f}<br>
+    • RHS: R(0) - C(M) - x*M/(ρ+λ)<br>
+    • RHS: = ${R_0:,.2f} - ${C_M:,.2f} - (${term_xM:,.2f})<br>
+    • RHS: = ${R_0:,.2f} - ${C_M:,.2f} + ${-term_xM:,.2f}<br>
+    • RHS: = ${RHS:,.2f}<br><br>
+    <b>Match:</b> ${R_x_star:,.2f} ≈ ${RHS:,.2f} ✓<br><br>
+    <b>Why R(x*) > R(0):</b><br>
+    Since x* is negative, e^(-ψx*) > 1, so R(x*) > R(0).<br>
+    This makes economic sense: the option to refinance is MORE valuable when you're
+    at the threshold (about to exercise) than right after refinancing (starting fresh).
     </div>
     """, unsafe_allow_html=True)
 
-    # Show if there's a discrepancy (for debugging)
-    discrepancy = abs(R_at_x_star - RHS_value_matching)
-    if discrepancy > 1:  # More than $1 difference
-        st.warning(f"Note: There's a ${discrepancy:,.2f} discrepancy. This may be due to numerical precision in the Lambert W calculation.")
+    # Show discrepancy warning if needed
+    discrepancy = abs(R_x_star - RHS)
+    if discrepancy > 1:
+        st.warning(f"Note: There's a ${discrepancy:,.2f} discrepancy, likely due to numerical precision in the Lambert W calculation.")
+
+
 
 
     # ===========================================
