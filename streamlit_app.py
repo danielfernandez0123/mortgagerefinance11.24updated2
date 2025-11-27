@@ -3437,6 +3437,580 @@ with tab9:
     else:
         st.error("x* is NaN - cannot verify. Check your input parameters.")
 
+# Add this to your tab definitions at the top (around line 71):
+# tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9, tab10 = st.tabs([
+#     "📊 Results", "📈 Sensitivity", "🔄 Rate History",
+#     "📉 Amortization", "🏠 Comparison", "💰 Break-Even",
+#     "📋 Summary", "📊 Net Benefit Timeline", "🔍 Value Matching Debug", "🏠 Rent vs Buy"
+# ])
+
+with tab10:
+    st.header("🏠 Rent vs Buy Calculator")
+
+    st.markdown("""
+    This calculator compares the 30-year financial outcomes of renting vs buying a home,
+    accounting for mortgage payments, investment returns, taxes, maintenance, and moving costs.
+    """)
+
+    # ===========================================
+    # INPUT PARAMETERS
+    # ===========================================
+    st.subheader("📝 Input Parameters")
+
+    col1, col2, col3 = st.columns(3)
+
+    with col1:
+        st.markdown("**🏠 Property Details**")
+        rb_home_price = st.number_input(
+            "Home Purchase Price ($)",
+            min_value=50000,
+            max_value=10000000,
+            value=500000,
+            step=10000,
+            key="rb_home_price"
+        )
+        rb_down_payment_pct = st.slider(
+            "Down Payment (%)",
+            min_value=0.0,
+            max_value=100.0,
+            value=20.0,
+            step=1.0,
+            key="rb_down_payment_pct"
+        ) / 100
+        rb_mortgage_rate = st.slider(
+            "Mortgage Interest Rate (%)",
+            min_value=1.0,
+            max_value=15.0,
+            value=7.0,
+            step=0.125,
+            key="rb_mortgage_rate"
+        ) / 100
+        rb_home_appreciation = st.slider(
+            "Annual Home Appreciation (%)",
+            min_value=-5.0,
+            max_value=15.0,
+            value=3.0,
+            step=0.5,
+            key="rb_home_appreciation"
+        ) / 100
+
+    with col2:
+        st.markdown("**💰 Rental Details**")
+        rb_monthly_rent = st.number_input(
+            "Monthly Rent ($)",
+            min_value=500,
+            max_value=50000,
+            value=2500,
+            step=100,
+            key="rb_monthly_rent"
+        )
+        rb_rent_increase = st.slider(
+            "Annual Rent Increase (%)",
+            min_value=0.0,
+            max_value=10.0,
+            value=3.0,
+            step=0.5,
+            key="rb_rent_increase"
+        ) / 100
+        rb_renters_insurance = st.number_input(
+            "Annual Renters Insurance ($)",
+            min_value=0,
+            max_value=5000,
+            value=300,
+            step=50,
+            key="rb_renters_insurance"
+        )
+
+    with col3:
+        st.markdown("**📈 Investment & Savings**")
+        rb_investment_return = st.slider(
+            "Annual Investment Return (%)",
+            min_value=0.0,
+            max_value=15.0,
+            value=7.0,
+            step=0.5,
+            key="rb_investment_return"
+        ) / 100
+        rb_inflation_rate = st.slider(
+            "Annual Inflation Rate (%)",
+            min_value=0.0,
+            max_value=10.0,
+            value=2.5,
+            step=0.5,
+            key="rb_inflation_rate"
+        ) / 100
+
+    st.markdown("---")
+
+    col1, col2, col3 = st.columns(3)
+
+    with col1:
+        st.markdown("**🏦 Homeowner Costs**")
+        rb_property_tax_rate = st.slider(
+            "Property Tax Rate (% of home value)",
+            min_value=0.0,
+            max_value=5.0,
+            value=1.25,
+            step=0.05,
+            key="rb_property_tax_rate"
+        ) / 100
+        rb_maintenance_rate = st.slider(
+            "Annual Maintenance (% of home value)",
+            min_value=0.0,
+            max_value=5.0,
+            value=1.0,
+            step=0.25,
+            key="rb_maintenance_rate"
+        ) / 100
+        rb_home_insurance_rate = st.slider(
+            "Home Insurance (% of home value)",
+            min_value=0.0,
+            max_value=2.0,
+            value=0.5,
+            step=0.1,
+            key="rb_home_insurance_rate"
+        ) / 100
+        rb_hoa_monthly = st.number_input(
+            "Monthly HOA Fees ($)",
+            min_value=0,
+            max_value=2000,
+            value=0,
+            step=50,
+            key="rb_hoa_monthly"
+        )
+
+    with col2:
+        st.markdown("**🚚 Moving & Transaction Costs**")
+        rb_years_before_move = st.slider(
+            "Years Before Moving (on average)",
+            min_value=1,
+            max_value=30,
+            value=7,
+            step=1,
+            key="rb_years_before_move"
+        )
+        rb_buying_costs_pct = st.slider(
+            "Buying Closing Costs (% of price)",
+            min_value=0.0,
+            max_value=10.0,
+            value=3.0,
+            step=0.5,
+            key="rb_buying_costs_pct"
+        ) / 100
+        rb_selling_costs_pct = st.slider(
+            "Selling Costs (% of sale price)",
+            min_value=0.0,
+            max_value=10.0,
+            value=6.0,
+            step=0.5,
+            key="rb_selling_costs_pct"
+        ) / 100
+        rb_moving_cost = st.number_input(
+            "Moving Cost Each Time ($)",
+            min_value=0,
+            max_value=50000,
+            value=5000,
+            step=500,
+            key="rb_moving_cost"
+        )
+
+    with col3:
+        st.markdown("**📋 Tax Information**")
+        rb_marginal_tax_rate = st.slider(
+            "Marginal Tax Rate (%)",
+            min_value=0.0,
+            max_value=50.0,
+            value=25.0,
+            step=1.0,
+            key="rb_marginal_tax_rate"
+        ) / 100
+        rb_itemize_deductions = st.checkbox(
+            "Itemize Deductions (mortgage interest)?",
+            value=True,
+            key="rb_itemize_deductions"
+        )
+        rb_capital_gains_rate = st.slider(
+            "Capital Gains Tax Rate (%)",
+            min_value=0.0,
+            max_value=30.0,
+            value=15.0,
+            step=1.0,
+            key="rb_capital_gains_rate"
+        ) / 100
+        rb_cap_gains_exclusion = st.number_input(
+            "Capital Gains Exclusion ($)",
+            min_value=0,
+            max_value=1000000,
+            value=250000,
+            step=50000,
+            help="$250k single / $500k married",
+            key="rb_cap_gains_exclusion"
+        )
+
+    # ===========================================
+    # CALCULATIONS
+    # ===========================================
+
+    # Derived values
+    rb_down_payment = rb_home_price * rb_down_payment_pct
+    rb_loan_amount = rb_home_price - rb_down_payment
+    rb_monthly_rate = rb_mortgage_rate / 12
+    rb_num_payments = 360  # 30 years
+
+    # Monthly mortgage payment (P&I)
+    if rb_loan_amount > 0 and rb_monthly_rate > 0:
+        rb_monthly_mortgage = rb_loan_amount * (rb_monthly_rate * (1 + rb_monthly_rate)**rb_num_payments) / ((1 + rb_monthly_rate)**rb_num_payments - 1)
+    else:
+        rb_monthly_mortgage = 0
+
+    # Initial closing costs for buying
+    rb_initial_buying_costs = rb_home_price * rb_buying_costs_pct
+
+    # Initialize tracking arrays
+    years = 30
+
+    # BUYING scenario arrays
+    buy_home_value = np.zeros(years + 1)
+    buy_loan_balance = np.zeros(years + 1)
+    buy_equity = np.zeros(years + 1)
+    buy_annual_mortgage = np.zeros(years)
+    buy_annual_interest = np.zeros(years)
+    buy_annual_principal = np.zeros(years)
+    buy_annual_property_tax = np.zeros(years)
+    buy_annual_maintenance = np.zeros(years)
+    buy_annual_insurance = np.zeros(years)
+    buy_annual_hoa = np.zeros(years)
+    buy_tax_savings = np.zeros(years)
+    buy_transaction_costs = np.zeros(years)
+    buy_total_cost = np.zeros(years)
+    buy_net_worth = np.zeros(years + 1)
+
+    # RENTING scenario arrays
+    rent_annual_rent = np.zeros(years)
+    rent_annual_insurance = np.zeros(years)
+    rent_investment_balance = np.zeros(years + 1)
+    rent_total_cost = np.zeros(years)
+    rent_net_worth = np.zeros(years + 1)
+    rent_moving_costs = np.zeros(years)
+
+    # Initial values
+    buy_home_value[0] = rb_home_price
+    buy_loan_balance[0] = rb_loan_amount
+    buy_equity[0] = rb_down_payment
+
+    # Renter invests the down payment + closing costs they didn't spend
+    rent_investment_balance[0] = rb_down_payment + rb_initial_buying_costs
+
+    # Initial net worth
+    buy_net_worth[0] = buy_equity[0] - rb_initial_buying_costs  # Spent closing costs
+    rent_net_worth[0] = rent_investment_balance[0]
+
+    # Track loan balance month by month for accurate interest calculation
+    current_loan_balance = rb_loan_amount
+
+    # Year-by-year simulation
+    for year in range(years):
+        # ===========================================
+        # BUYING SCENARIO
+        # ===========================================
+
+        # Home appreciation
+        buy_home_value[year + 1] = buy_home_value[year] * (1 + rb_home_appreciation)
+
+        # Calculate mortgage payments for the year (month by month for accuracy)
+        annual_interest = 0
+        annual_principal = 0
+        for month in range(12):
+            if current_loan_balance > 0:
+                interest_payment = current_loan_balance * rb_monthly_rate
+                principal_payment = min(rb_monthly_mortgage - interest_payment, current_loan_balance)
+                annual_interest += interest_payment
+                annual_principal += principal_payment
+                current_loan_balance -= principal_payment
+
+        buy_annual_mortgage[year] = rb_monthly_mortgage * 12
+        buy_annual_interest[year] = annual_interest
+        buy_annual_principal[year] = annual_principal
+        buy_loan_balance[year + 1] = max(0, current_loan_balance)
+
+        # Property costs (based on current home value)
+        buy_annual_property_tax[year] = buy_home_value[year] * rb_property_tax_rate
+        buy_annual_maintenance[year] = buy_home_value[year] * rb_maintenance_rate
+        buy_annual_insurance[year] = buy_home_value[year] * rb_home_insurance_rate
+        buy_annual_hoa[year] = rb_hoa_monthly * 12
+
+        # Tax savings from mortgage interest deduction
+        if rb_itemize_deductions:
+            buy_tax_savings[year] = buy_annual_interest[year] * rb_marginal_tax_rate
+
+        # Transaction costs when moving
+        if rb_years_before_move > 0 and (year + 1) % rb_years_before_move == 0 and year < years - 1:
+            # Selling costs on current home value
+            selling_costs = buy_home_value[year + 1] * rb_selling_costs_pct
+            # Buying costs on new home (assume same value)
+            buying_costs = buy_home_value[year + 1] * rb_buying_costs_pct
+            # Moving costs
+            buy_transaction_costs[year] = selling_costs + buying_costs + rb_moving_cost
+
+        # Total annual cost of owning
+        buy_total_cost[year] = (
+            buy_annual_mortgage[year] +
+            buy_annual_property_tax[year] +
+            buy_annual_maintenance[year] +
+            buy_annual_insurance[year] +
+            buy_annual_hoa[year] -
+            buy_tax_savings[year] +
+            buy_transaction_costs[year]
+        )
+
+        # Equity
+        buy_equity[year + 1] = buy_home_value[year + 1] - buy_loan_balance[year + 1]
+
+        # Net worth for buyer (equity minus any transaction costs incurred)
+        cumulative_transaction_costs = np.sum(buy_transaction_costs[:year + 1])
+        buy_net_worth[year + 1] = buy_equity[year + 1] - cumulative_transaction_costs
+
+        # ===========================================
+        # RENTING SCENARIO
+        # ===========================================
+
+        # Rent with annual increases
+        rent_annual_rent[year] = rb_monthly_rent * 12 * ((1 + rb_rent_increase) ** year)
+        rent_annual_insurance[year] = rb_renters_insurance * ((1 + rb_inflation_rate) ** year)
+
+        # Moving costs for renters
+        if rb_years_before_move > 0 and (year + 1) % rb_years_before_move == 0 and year < years - 1:
+            rent_moving_costs[year] = rb_moving_cost
+
+        rent_total_cost[year] = rent_annual_rent[year] + rent_annual_insurance[year] + rent_moving_costs[year]
+
+        # Renter invests the difference between buy costs and rent costs
+        cost_difference = buy_total_cost[year] - rent_total_cost[year]
+
+        # Investment grows, plus add any savings
+        rent_investment_balance[year + 1] = rent_investment_balance[year] * (1 + rb_investment_return)
+        if cost_difference > 0:
+            # Renter saves money, invests it
+            rent_investment_balance[year + 1] += cost_difference
+        else:
+            # Renter pays more, withdraws from investments (if possible)
+            rent_investment_balance[year + 1] += cost_difference  # cost_difference is negative
+
+        rent_net_worth[year + 1] = rent_investment_balance[year + 1]
+
+    # ===========================================
+    # FINAL CALCULATIONS
+    # ===========================================
+
+    # Capital gains calculation for seller at year 30
+    total_appreciation = buy_home_value[years] - rb_home_price
+    taxable_gain = max(0, total_appreciation - rb_cap_gains_exclusion)
+    capital_gains_tax = taxable_gain * rb_capital_gains_rate
+
+    # Final selling costs if liquidating at year 30
+    final_selling_costs = buy_home_value[years] * rb_selling_costs_pct
+
+    # Adjusted final net worth for buyer
+    buy_final_net_worth = buy_equity[years] - final_selling_costs - capital_gains_tax
+
+    # Renter's capital gains on investments (simplified - assume all gains are taxable)
+    rent_total_contributions = rb_down_payment + rb_initial_buying_costs + np.sum(np.maximum(0, buy_total_cost - rent_total_cost))
+    rent_investment_gains = rent_investment_balance[years] - rent_total_contributions
+    rent_capital_gains_tax = max(0, rent_investment_gains) * rb_capital_gains_rate
+    rent_final_net_worth = rent_investment_balance[years] - rent_capital_gains_tax
+
+    # ===========================================
+    # DISPLAY RESULTS
+    # ===========================================
+
+    st.markdown("---")
+    st.subheader("📊 30-Year Analysis Results")
+
+    # Summary metrics
+    col1, col2, col3 = st.columns(3)
+
+    with col1:
+        st.markdown("### 🏠 Buying")
+        st.metric("Final Home Value", f"${buy_home_value[years]:,.0f}")
+        st.metric("Final Loan Balance", f"${buy_loan_balance[years]:,.0f}")
+        st.metric("Final Equity", f"${buy_equity[years]:,.0f}")
+        st.metric("Less: Final Selling Costs", f"-${final_selling_costs:,.0f}")
+        st.metric("Less: Capital Gains Tax", f"-${capital_gains_tax:,.0f}")
+        st.metric("**Net Worth (After Sale)**", f"${buy_final_net_worth:,.0f}")
+
+    with col2:
+        st.markdown("### 🏢 Renting")
+        st.metric("Investment Balance", f"${rent_investment_balance[years]:,.0f}")
+        st.metric("Total Contributions", f"${rent_total_contributions:,.0f}")
+        st.metric("Investment Gains", f"${rent_investment_gains:,.0f}")
+        st.metric("Less: Capital Gains Tax", f"-${rent_capital_gains_tax:,.0f}")
+        st.metric("**Net Worth (After Tax)**", f"${rent_final_net_worth:,.0f}")
+
+    with col3:
+        st.markdown("### 📈 Comparison")
+        difference = buy_final_net_worth - rent_final_net_worth
+        if difference > 0:
+            st.metric("**Buying Advantage**", f"${difference:,.0f}", delta=f"Buying wins by ${difference:,.0f}")
+        else:
+            st.metric("**Renting Advantage**", f"${-difference:,.0f}", delta=f"Renting wins by ${-difference:,.0f}")
+
+        st.metric("Total Paid (Buying)", f"${np.sum(buy_total_cost):,.0f}")
+        st.metric("Total Paid (Renting)", f"${np.sum(rent_total_cost):,.0f}")
+
+    # ===========================================
+    # CHARTS
+    # ===========================================
+
+    st.markdown("---")
+    st.subheader("📈 Net Worth Over Time")
+
+    # Create DataFrame for plotting
+    chart_data = pd.DataFrame({
+        'Year': range(years + 1),
+        'Buying Net Worth': buy_net_worth,
+        'Renting Net Worth': rent_net_worth
+    })
+
+    fig_networth = go.Figure()
+    fig_networth.add_trace(go.Scatter(
+        x=chart_data['Year'],
+        y=chart_data['Buying Net Worth'],
+        mode='lines',
+        name='Buying',
+        line=dict(color='green', width=3)
+    ))
+    fig_networth.add_trace(go.Scatter(
+        x=chart_data['Year'],
+        y=chart_data['Renting Net Worth'],
+        mode='lines',
+        name='Renting',
+        line=dict(color='blue', width=3)
+    ))
+    fig_networth.update_layout(
+        title='Net Worth Comparison: Buying vs Renting',
+        xaxis_title='Year',
+        yaxis_title='Net Worth ($)',
+        hovermode='x unified',
+        yaxis_tickformat='$,.0f'
+    )
+    st.plotly_chart(fig_networth, use_container_width=True)
+
+    # Crossover point
+    crossover_year = None
+    for i in range(1, years + 1):
+        if buy_net_worth[i] > rent_net_worth[i] and buy_net_worth[i-1] <= rent_net_worth[i-1]:
+            crossover_year = i
+            break
+        elif buy_net_worth[i] < rent_net_worth[i] and buy_net_worth[i-1] >= rent_net_worth[i-1]:
+            crossover_year = i
+            break
+
+    if crossover_year:
+        st.info(f"📍 Crossover point: Year {crossover_year} - After this point, {'buying' if buy_net_worth[crossover_year] > rent_net_worth[crossover_year] else 'renting'} becomes more advantageous.")
+
+    # ===========================================
+    # ANNUAL COST BREAKDOWN
+    # ===========================================
+
+    st.markdown("---")
+    st.subheader("💸 Annual Cost Breakdown")
+
+    col1, col2 = st.columns(2)
+
+    with col1:
+        st.markdown("### Year 1 Costs - Buying")
+        buy_year1_data = {
+            'Category': ['Mortgage (P&I)', 'Property Tax', 'Maintenance', 'Insurance', 'HOA', 'Tax Savings', 'Net Cost'],
+            'Amount': [
+                buy_annual_mortgage[0],
+                buy_annual_property_tax[0],
+                buy_annual_maintenance[0],
+                buy_annual_insurance[0],
+                buy_annual_hoa[0],
+                -buy_tax_savings[0],
+                buy_total_cost[0]
+            ]
+        }
+        st.dataframe(pd.DataFrame(buy_year1_data).style.format({'Amount': '${:,.0f}'}), hide_index=True)
+
+    with col2:
+        st.markdown("### Year 1 Costs - Renting")
+        rent_year1_data = {
+            'Category': ['Rent', 'Renters Insurance', 'Total Cost'],
+            'Amount': [
+                rent_annual_rent[0],
+                rent_annual_insurance[0],
+                rent_total_cost[0]
+            ]
+        }
+        st.dataframe(pd.DataFrame(rent_year1_data).style.format({'Amount': '${:,.0f}'}), hide_index=True)
+
+    # ===========================================
+    # DETAILED YEARLY TABLE
+    # ===========================================
+
+    st.markdown("---")
+    with st.expander("📋 Detailed Year-by-Year Analysis"):
+        detailed_data = pd.DataFrame({
+            'Year': range(1, years + 1),
+            'Home Value': buy_home_value[1:],
+            'Loan Balance': buy_loan_balance[1:],
+            'Buy Equity': buy_equity[1:],
+            'Buy Annual Cost': buy_total_cost,
+            'Buy Net Worth': buy_net_worth[1:],
+            'Rent Annual Cost': rent_total_cost,
+            'Rent Investments': rent_investment_balance[1:],
+            'Rent Net Worth': rent_net_worth[1:],
+            'Buy vs Rent': buy_net_worth[1:] - rent_net_worth[1:]
+        })
+
+        st.dataframe(
+            detailed_data.style.format({
+                'Home Value': '${:,.0f}',
+                'Loan Balance': '${:,.0f}',
+                'Buy Equity': '${:,.0f}',
+                'Buy Annual Cost': '${:,.0f}',
+                'Buy Net Worth': '${:,.0f}',
+                'Rent Annual Cost': '${:,.0f}',
+                'Rent Investments': '${:,.0f}',
+                'Rent Net Worth': '${:,.0f}',
+                'Buy vs Rent': '${:,.0f}'
+            }),
+            hide_index=True,
+            use_container_width=True
+        )
+
+    # ===========================================
+    # KEY ASSUMPTIONS
+    # ===========================================
+
+    st.markdown("---")
+    with st.expander("📝 Key Assumptions & Notes"):
+        st.markdown(f"""
+        **Buying Scenario:**
+        - Down payment: ${rb_down_payment:,.0f} ({rb_down_payment_pct*100:.0f}%)
+        - Loan amount: ${rb_loan_amount:,.0f}
+        - Monthly mortgage payment (P&I): ${rb_monthly_mortgage:,.2f}
+        - Initial closing costs: ${rb_initial_buying_costs:,.0f}
+        - Number of moves in 30 years: {30 // rb_years_before_move if rb_years_before_move > 0 else 0}
+        - Each move costs: ${rb_moving_cost:,.0f} + {rb_selling_costs_pct*100:.1f}% selling + {rb_buying_costs_pct*100:.1f}% buying
+
+        **Renting Scenario:**
+        - Initial investment: ${rb_down_payment + rb_initial_buying_costs:,.0f} (down payment + closing costs saved)
+        - Renter invests any monthly savings vs buying costs
+        - Investment returns compounded annually at {rb_investment_return*100:.1f}%
+
+        **Tax Treatment:**
+        - Mortgage interest deduction: {'Yes' if rb_itemize_deductions else 'No'}
+        - Capital gains exclusion on home sale: ${rb_cap_gains_exclusion:,.0f}
+        - Capital gains tax rate: {rb_capital_gains_rate*100:.0f}%
+
+        **Notes:**
+        - This is a simplified model. Actual results will vary.
+        - Does not account for: PMI, opportunity cost of time spent on maintenance, emotional factors
+        - Home appreciation and investment returns are not guaranteed
+        - Tax laws may change over time
+        """)
 
 
 # Footer
