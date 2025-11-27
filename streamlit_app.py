@@ -3444,6 +3444,13 @@ with tab9:
 #     "📋 Summary", "📊 Net Benefit Timeline", "🔍 Value Matching Debug", "🏠 Rent vs Buy"
 # ])
 
+# Add this to your tab definitions at the top (around line 71):
+# tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9, tab10 = st.tabs([
+#     "📊 Results", "📈 Sensitivity", "🔄 Rate History",
+#     "📉 Amortization", "🏠 Comparison", "💰 Break-Even",
+#     "📋 Summary", "📊 Net Benefit Timeline", "🔍 Value Matching Debug", "🏠 Rent vs Buy"
+# ])
+
 with tab10:
     st.header("🏠 Rent vs Buy Calculator")
 
@@ -3496,14 +3503,21 @@ with tab10:
 
     with col2:
         st.markdown("**💰 Rental Details**")
-        rb_monthly_rent = st.number_input(
-            "Monthly Rent ($)",
-            min_value=500,
-            max_value=50000,
-            value=2500,
-            step=100,
-            key="rb_monthly_rent"
-        )
+        rb_rent_pct = st.slider(
+            "Annual Rent (% of Home Price)",
+            min_value=1.0,
+            max_value=15.0,
+            value=6.0,
+            step=0.25,
+            help="Typical range: 4-8% of home value annually",
+            key="rb_rent_pct"
+        ) / 100
+        # Calculate monthly rent from percentage
+        rb_annual_rent_calc = rb_home_price * rb_rent_pct
+        rb_monthly_rent = rb_annual_rent_calc / 12
+        st.markdown(f"**Calculated Monthly Rent: ${rb_monthly_rent:,.0f}**")
+        st.markdown(f"*(Annual: ${rb_annual_rent_calc:,.0f})*")
+
         rb_rent_increase = st.slider(
             "Annual Rent Increase (%)",
             min_value=0.0,
@@ -3578,6 +3592,17 @@ with tab10:
             step=50,
             key="rb_hoa_monthly"
         )
+
+        st.markdown("**🔒 Mortgage Insurance (PMI)**")
+        rb_pmi_rate = st.slider(
+            "PMI Rate (% of loan, annual)",
+            min_value=0.0,
+            max_value=2.0,
+            value=0.5,
+            step=0.1,
+            help="Typically 0.3% - 1.5% of loan amount. Only applies when LTV > 78%",
+            key="rb_pmi_rate"
+        ) / 100
 
     with col2:
         st.markdown("**🚚 Moving & Transaction Costs**")
@@ -3657,6 +3682,9 @@ with tab10:
     rb_monthly_rate = rb_mortgage_rate / 12
     rb_num_payments = 360  # 30 years
 
+    # Initial LTV
+    rb_initial_ltv = rb_loan_amount / rb_home_price if rb_home_price > 0 else 0
+
     # Monthly mortgage payment (P&I)
     if rb_loan_amount > 0 and rb_monthly_rate > 0:
         rb_monthly_mortgage = rb_loan_amount * (rb_monthly_rate * (1 + rb_monthly_rate)**rb_num_payments) / ((1 + rb_monthly_rate)**rb_num_payments - 1)
@@ -3673,6 +3701,7 @@ with tab10:
     buy_home_value = np.zeros(years + 1)
     buy_loan_balance = np.zeros(years + 1)
     buy_equity = np.zeros(years + 1)
+    buy_ltv = np.zeros(years + 1)
     buy_annual_mortgage = np.zeros(years)
     buy_annual_interest = np.zeros(years)
     buy_annual_principal = np.zeros(years)
@@ -3680,6 +3709,7 @@ with tab10:
     buy_annual_maintenance = np.zeros(years)
     buy_annual_insurance = np.zeros(years)
     buy_annual_hoa = np.zeros(years)
+    buy_annual_pmi = np.zeros(years)
     buy_tax_savings = np.zeros(years)
     buy_transaction_costs = np.zeros(years)
     buy_total_cost = np.zeros(years)
@@ -3697,6 +3727,7 @@ with tab10:
     buy_home_value[0] = rb_home_price
     buy_loan_balance[0] = rb_loan_amount
     buy_equity[0] = rb_down_payment
+    buy_ltv[0] = rb_initial_ltv
 
     # Renter invests the down payment + closing costs they didn't spend
     rent_investment_balance[0] = rb_down_payment + rb_initial_buying_costs
@@ -3707,6 +3738,8 @@ with tab10:
 
     # Track loan balance month by month for accurate interest calculation
     current_loan_balance = rb_loan_amount
+    # Track original home price for PMI calculation (LTV based on original purchase price)
+    original_home_price = rb_home_price
 
     # Year-by-year simulation
     for year in range(years):
@@ -3720,18 +3753,32 @@ with tab10:
         # Calculate mortgage payments for the year (month by month for accuracy)
         annual_interest = 0
         annual_principal = 0
+        annual_pmi = 0
+
         for month in range(12):
             if current_loan_balance > 0:
                 interest_payment = current_loan_balance * rb_monthly_rate
                 principal_payment = min(rb_monthly_mortgage - interest_payment, current_loan_balance)
                 annual_interest += interest_payment
                 annual_principal += principal_payment
+
+                # PMI calculation - based on LTV against ORIGINAL purchase price
+                # PMI drops off when LTV reaches 78%
+                current_ltv = current_loan_balance / original_home_price
+                if current_ltv > 0.78:
+                    monthly_pmi = (current_loan_balance * rb_pmi_rate) / 12
+                    annual_pmi += monthly_pmi
+
                 current_loan_balance -= principal_payment
 
         buy_annual_mortgage[year] = rb_monthly_mortgage * 12
         buy_annual_interest[year] = annual_interest
         buy_annual_principal[year] = annual_principal
+        buy_annual_pmi[year] = annual_pmi
         buy_loan_balance[year + 1] = max(0, current_loan_balance)
+
+        # Calculate LTV at end of year (based on original price for PMI purposes)
+        buy_ltv[year + 1] = buy_loan_balance[year + 1] / original_home_price if original_home_price > 0 else 0
 
         # Property costs (based on current home value)
         buy_annual_property_tax[year] = buy_home_value[year] * rb_property_tax_rate
@@ -3751,6 +3798,8 @@ with tab10:
             buying_costs = buy_home_value[year + 1] * rb_buying_costs_pct
             # Moving costs
             buy_transaction_costs[year] = selling_costs + buying_costs + rb_moving_cost
+            # Update original home price for PMI calculation on new home
+            original_home_price = buy_home_value[year + 1]
 
         # Total annual cost of owning
         buy_total_cost[year] = (
@@ -3758,7 +3807,8 @@ with tab10:
             buy_annual_property_tax[year] +
             buy_annual_maintenance[year] +
             buy_annual_insurance[year] +
-            buy_annual_hoa[year] -
+            buy_annual_hoa[year] +
+            buy_annual_pmi[year] -
             buy_tax_savings[year] +
             buy_transaction_costs[year]
         )
@@ -3819,12 +3869,31 @@ with tab10:
     rent_capital_gains_tax = max(0, rent_investment_gains) * rb_capital_gains_rate
     rent_final_net_worth = rent_investment_balance[years] - rent_capital_gains_tax
 
+    # Calculate total PMI paid
+    total_pmi_paid = np.sum(buy_annual_pmi)
+
+    # Find year when PMI drops off
+    pmi_dropoff_year = None
+    for i in range(years + 1):
+        if buy_ltv[i] <= 0.78:
+            pmi_dropoff_year = i
+            break
+
     # ===========================================
     # DISPLAY RESULTS
     # ===========================================
 
     st.markdown("---")
     st.subheader("📊 30-Year Analysis Results")
+
+    # PMI Info box
+    if rb_initial_ltv > 0.78:
+        if pmi_dropoff_year:
+            st.info(f"🔒 **PMI Info:** Starting LTV is {rb_initial_ltv*100:.1f}%. PMI of ${buy_annual_pmi[0]:,.0f}/year applies until LTV reaches 78% (Year {pmi_dropoff_year}). Total PMI paid: ${total_pmi_paid:,.0f}")
+        else:
+            st.info(f"🔒 **PMI Info:** Starting LTV is {rb_initial_ltv*100:.1f}%. PMI applies for the full 30 years. Total PMI paid: ${total_pmi_paid:,.0f}")
+    else:
+        st.success(f"✅ **No PMI Required:** Down payment of {rb_down_payment_pct*100:.0f}% results in LTV of {rb_initial_ltv*100:.1f}%, below the 78% threshold.")
 
     # Summary metrics
     col1, col2, col3 = st.columns(3)
@@ -3856,6 +3925,7 @@ with tab10:
 
         st.metric("Total Paid (Buying)", f"${np.sum(buy_total_cost):,.0f}")
         st.metric("Total Paid (Renting)", f"${np.sum(rent_total_cost):,.0f}")
+        st.metric("Total PMI Paid", f"${total_pmi_paid:,.0f}")
 
     # ===========================================
     # CHARTS
@@ -3909,6 +3979,31 @@ with tab10:
         st.info(f"📍 Crossover point: Year {crossover_year} - After this point, {'buying' if buy_net_worth[crossover_year] > rent_net_worth[crossover_year] else 'renting'} becomes more advantageous.")
 
     # ===========================================
+    # LTV CHART
+    # ===========================================
+
+    st.markdown("---")
+    st.subheader("📉 Loan-to-Value (LTV) Over Time")
+
+    fig_ltv = go.Figure()
+    fig_ltv.add_trace(go.Scatter(
+        x=list(range(years + 1)),
+        y=buy_ltv * 100,
+        mode='lines',
+        name='LTV %',
+        line=dict(color='purple', width=3)
+    ))
+    fig_ltv.add_hline(y=78, line_dash="dash", line_color="red", annotation_text="78% PMI Threshold")
+    fig_ltv.update_layout(
+        title='LTV Ratio Over Time (PMI drops at 78%)',
+        xaxis_title='Year',
+        yaxis_title='LTV (%)',
+        hovermode='x unified',
+        yaxis_tickformat='.1f'
+    )
+    st.plotly_chart(fig_ltv, use_container_width=True)
+
+    # ===========================================
     # ANNUAL COST BREAKDOWN
     # ===========================================
 
@@ -3920,13 +4015,14 @@ with tab10:
     with col1:
         st.markdown("### Year 1 Costs - Buying")
         buy_year1_data = {
-            'Category': ['Mortgage (P&I)', 'Property Tax', 'Maintenance', 'Insurance', 'HOA', 'Tax Savings', 'Net Cost'],
+            'Category': ['Mortgage (P&I)', 'Property Tax', 'Maintenance', 'Insurance', 'HOA', 'PMI', 'Tax Savings', 'Net Cost'],
             'Amount': [
                 buy_annual_mortgage[0],
                 buy_annual_property_tax[0],
                 buy_annual_maintenance[0],
                 buy_annual_insurance[0],
                 buy_annual_hoa[0],
+                buy_annual_pmi[0],
                 -buy_tax_savings[0],
                 buy_total_cost[0]
             ]
@@ -3955,6 +4051,8 @@ with tab10:
             'Year': range(1, years + 1),
             'Home Value': buy_home_value[1:],
             'Loan Balance': buy_loan_balance[1:],
+            'LTV %': buy_ltv[1:] * 100,
+            'PMI': buy_annual_pmi,
             'Buy Equity': buy_equity[1:],
             'Buy Annual Cost': buy_total_cost,
             'Buy Net Worth': buy_net_worth[1:],
@@ -3968,6 +4066,8 @@ with tab10:
             detailed_data.style.format({
                 'Home Value': '${:,.0f}',
                 'Loan Balance': '${:,.0f}',
+                'LTV %': '{:.1f}%',
+                'PMI': '${:,.0f}',
                 'Buy Equity': '${:,.0f}',
                 'Buy Annual Cost': '${:,.0f}',
                 'Buy Net Worth': '${:,.0f}',
@@ -3988,14 +4088,20 @@ with tab10:
     with st.expander("📝 Key Assumptions & Notes"):
         st.markdown(f"""
         **Buying Scenario:**
+        - Home price: ${rb_home_price:,.0f}
         - Down payment: ${rb_down_payment:,.0f} ({rb_down_payment_pct*100:.0f}%)
         - Loan amount: ${rb_loan_amount:,.0f}
+        - Initial LTV: {rb_initial_ltv*100:.1f}%
         - Monthly mortgage payment (P&I): ${rb_monthly_mortgage:,.2f}
         - Initial closing costs: ${rb_initial_buying_costs:,.0f}
+        - PMI rate: {rb_pmi_rate*100:.2f}% annually (until LTV ≤ 78%)
+        - PMI drops off: {'Year ' + str(pmi_dropoff_year) if pmi_dropoff_year else 'Never (LTV stays above 78%)' if rb_initial_ltv > 0.78 else 'N/A (no PMI required)'}
+        - Total PMI paid: ${total_pmi_paid:,.0f}
         - Number of moves in 30 years: {30 // rb_years_before_move if rb_years_before_move > 0 else 0}
         - Each move costs: ${rb_moving_cost:,.0f} + {rb_selling_costs_pct*100:.1f}% selling + {rb_buying_costs_pct*100:.1f}% buying
 
         **Renting Scenario:**
+        - Monthly rent: ${rb_monthly_rent:,.0f} ({rb_rent_pct*100:.1f}% of home price annually)
         - Initial investment: ${rb_down_payment + rb_initial_buying_costs:,.0f} (down payment + closing costs saved)
         - Renter invests any monthly savings vs buying costs
         - Investment returns compounded annually at {rb_investment_return*100:.1f}%
@@ -4005,9 +4111,14 @@ with tab10:
         - Capital gains exclusion on home sale: ${rb_cap_gains_exclusion:,.0f}
         - Capital gains tax rate: {rb_capital_gains_rate*100:.0f}%
 
+        **PMI Rules:**
+        - PMI is required when LTV > 78%
+        - PMI is calculated based on the ORIGINAL purchase price (not current market value)
+        - PMI automatically drops off when loan balance reaches 78% of original purchase price
+
         **Notes:**
         - This is a simplified model. Actual results will vary.
-        - Does not account for: PMI, opportunity cost of time spent on maintenance, emotional factors
+        - Does not account for: opportunity cost of time spent on maintenance, emotional factors
         - Home appreciation and investment returns are not guaranteed
         - Tax laws may change over time
         """)
