@@ -2365,395 +2365,507 @@ with tab7:
 with tab8:
     st.header("📈 Net Benefit Over Time Analysis")
 
-    # ===========================================
-    # DEBUG: Verify x* and Value Matching
-    # ===========================================
-    st.subheader("🔍 Debug: Verifying x* and Value Matching")
-
-    # From equation (21) on page 15:
-    # e^(ψx*) - ψx* = 1 + C(M)/M × ψ(ρ+λ)
-    # This is the equation that x* must satisfy
-
-    if not np.isnan(x_star):
-        # LHS of equation (21)
-        eq21_LHS = np.exp(psi * x_star) - psi * x_star
-
-        # RHS of equation (21)
-        eq21_RHS = 1 + (C_M / M) * psi * (rho + lambda_val)
-
-        st.markdown("### Step 1: Verify x* satisfies equation (21)")
-        st.latex(r"e^{\psi x^*} - \psi x^* = 1 + \frac{C(M)}{M} \psi (\rho + \lambda)")
-
-        col1, col2 = st.columns(2)
-        with col1:
-            st.metric("LHS: e^(ψx*) - ψx*", f"{eq21_LHS:.6f}")
-        with col2:
-            st.metric("RHS: 1 + C(M)/M × ψ(ρ+λ)", f"{eq21_RHS:.6f}")
-
-        eq21_match = abs(eq21_LHS - eq21_RHS) < 0.001
-        if eq21_match:
-            st.success(f"✓ Equation (21) is satisfied! Difference: {abs(eq21_LHS - eq21_RHS):.8f}")
-        else:
-            st.error(f"✗ Equation (21) NOT satisfied! Difference: {abs(eq21_LHS - eq21_RHS):.6f}")
-
-        # Now verify value matching using equation (17)
-        # Ke^(-ψx*) = K - C(M) - x*M/(ρ+λ)
-        st.markdown("### Step 2: Verify Value Matching - Equation (17)")
-        st.latex(r"K e^{-\psi x^*} = K - C(M) - \frac{x^* M}{\rho + \lambda}")
-
-        # K from equation (19) on page 15
-        K = (1/psi) * M * np.exp(psi * x_star) / (rho + lambda_val)
-
-        # LHS of equation (17)
-        eq17_LHS = K * np.exp(-psi * x_star)
-
-        # RHS of equation (17)
-        eq17_RHS = K - C_M - (x_star * M) / (rho + lambda_val)
-
-        st.markdown(f"""
-        **K** = (1/ψ) × M × e^(ψx*) / (ρ+λ)
-        K = (1/{psi:.4f}) × {M:,.0f} × e^({psi:.4f}×{x_star:.6f}) / {rho + lambda_val:.4f}
-        K = **${K:,.2f}**
-        """)
-
-        col1, col2 = st.columns(2)
-        with col1:
-            st.metric("LHS: K × e^(-ψx*)", f"${eq17_LHS:,.2f}")
-            st.caption(f"= {K:,.2f} × e^(-{psi:.4f}×{x_star:.6f})")
-            st.caption(f"= {K:,.2f} × {np.exp(-psi * x_star):.6f}")
-        with col2:
-            st.metric("RHS: K - C(M) - x*M/(ρ+λ)", f"${eq17_RHS:,.2f}")
-            st.caption(f"= {K:,.2f} - {C_M:,.2f} - ({x_star:.6f}×{M:,.0f})/{rho + lambda_val:.4f}")
-            st.caption(f"= {K:,.2f} - {C_M:,.2f} - ({(x_star * M) / (rho + lambda_val):,.2f})")
-
-        eq17_match = abs(eq17_LHS - eq17_RHS) < 1
-        if eq17_match:
-            st.success(f"✓ Value matching satisfied! Difference: ${abs(eq17_LHS - eq17_RHS):,.2f}")
-        else:
-            st.error(f"✗ Value matching NOT satisfied! Difference: ${abs(eq17_LHS - eq17_RHS):,.2f}")
-
-        # Show what R(0) and R(x*) actually are
-        st.markdown("### Step 3: Option Values")
-        st.markdown("""
-        From the paper, R(x) = K × e^(-ψx) represents the **option value** of refinancing.
-        """)
-
-        R_0 = K  # R(0) = K × e^0 = K
-        R_x_star = K * np.exp(-psi * x_star)
-
-        col1, col2, col3 = st.columns(3)
-        with col1:
-            st.metric("R(0) = K", f"${R_0:,.2f}")
-        with col2:
-            st.metric("R(x*) = K×e^(-ψx*)", f"${R_x_star:,.2f}")
-        with col3:
-            st.metric("C(M)", f"${C_M:,.2f}")
-
-        st.markdown(f"""
-        **x\*M/(ρ+λ)** = ({x_star:.6f} × {M:,.0f}) / {rho + lambda_val:.4f} = **${(x_star * M) / (rho + lambda_val):,.2f}**
-
-        Since x* = {x_star:.6f} is **negative**, x*M/(ρ+λ) = ${(x_star * M) / (rho + lambda_val):,.2f} is also **negative**.
-
-        So subtracting a negative in the value matching equation means **adding**:
-        - R(0) - C(M) - (negative) = R(0) - C(M) + |x*|M/(ρ+λ)
-        """)
-
-        # Show all the key parameters
-        st.markdown("### Step 4: All Parameters")
-        param_col1, param_col2, param_col3, param_col4 = st.columns(4)
-        with param_col1:
-            st.metric("x* (threshold)", f"{x_star:.6f}")
-            st.metric("x* in bps", f"{x_star * 10000:.2f}")
-        with param_col2:
-            st.metric("ψ (psi)", f"{psi:.6f}")
-            st.metric("φ (phi)", f"{phi:.6f}")
-        with param_col3:
-            st.metric("ρ (rho)", f"{rho:.4f}")
-            st.metric("λ (lambda)", f"{lambda_val:.4f}")
-        with param_col4:
-            st.metric("ρ + λ", f"{rho + lambda_val:.4f}")
-            st.metric("σ (sigma)", f"{sigma:.4f}")
-
-    else:
-        st.error("x* is NaN - cannot verify")
-
-    # ===========================================
-    # REST OF TAB 8 - Net Benefit Analysis
-    # ===========================================
-    st.markdown("---")
     st.markdown("""
-    Analyze how the net benefit of refinancing accumulates over time in future value terms.
-    This shows the actual dollar benefit without present value discounting.
+    This analysis shows the net benefit of refinancing based on the paper's value matching condition
+    and uses actual amortization schedules for precise calculations.
     """)
 
-    # Input parameters specific to this analysis
-    st.subheader("🔧 Analysis Parameters")
+    # ===========================================
+    # SECTION 1: Value Matching Formula Display
+    # ===========================================
+    st.subheader("📐 Value Matching Condition (Theorem 2)")
 
-    col1, col2, col3, col4 = st.columns(4)
+    st.markdown("""
+    At the optimal refinancing threshold x*, the following **value matching condition** holds:
+    """)
 
-    with col1:
-        analysis_invest_rate = st.number_input(
-            "Investment Rate (%)",
-            min_value=0.0,
-            max_value=20.0,
-            value=5.0,
-            step=0.5,
-            help="Return on invested payment savings",
-            key="tab8_invest"
-        ) / 100
+    st.latex(r"R(x^*) = R(0) - C(M) - \frac{x^* \cdot M}{\rho + \lambda}")
 
-    with col2:
-        analysis_loan_term = st.number_input(
-            "Analysis Period (years)",
-            min_value=1,
-            max_value=30,
-            value=30,
-            step=1,
-            help="How many years to analyze",
-            key="tab8_term"
-        )
+    st.markdown("""
+    Where:
+    - **R(x*)** = Option value at optimal threshold (value of refinancing option when you refinance)
+    - **R(0)** = Option value at x=0 (value of refinancing option right after refinancing)
+    - **C(M)** = Tax-adjusted refinancing cost = κ(M)/(1-τ)
+    - **x*** = Optimal rate differential (negative, since new rate < old rate)
+    - **M** = Mortgage balance
+    - **ρ** = Real discount rate
+    - **λ** = Expected real rate of mortgage repayment (includes moving, principal repayment, inflation)
+    """)
 
-    with col3:
-        include_taxes_calc = st.checkbox(
-            "Include Tax Effects",
-            value=True,
-            help="Include mortgage interest tax deduction",
-            key="tab8_taxes"
-        )
-
-    with col4:
-        include_closing_costs = st.checkbox(
-            "Include Closing Costs",
-            value=True,
-            help="Subtract closing costs from benefit",
-            key="tab8_costs"
-        )
-
+    # Calculate and display all components
     st.markdown("---")
-    st.subheader("📊 Refinancing Scenario")
+    st.markdown("### 🔢 Your Parameter Values")
 
-    # Create a simple input for rate change and closing costs
-    col1b, col2b, col3b = st.columns(3)
+    col1f, col2f = st.columns(2)
 
-    with col1b:
-        rate_reduction = st.number_input(
+    with col1f:
+        st.markdown(f"""
+        **Input Parameters:**
+        - M (Mortgage Balance) = **${M:,.0f}**
+        - i₀ (Original Rate) = **{i0*100:.3f}%**
+        - ρ (Real Discount Rate) = **{rho*100:.2f}%**
+        - τ (Tax Rate) = **{tau*100:.1f}%**
+        - σ (Interest Rate Volatility) = **{sigma:.4f}**
+        - μ (Probability of Moving) = **{mu*100:.1f}%**
+        - π (Inflation Rate) = **{pi*100:.1f}%**
+        - Γ (Remaining Years) = **{Gamma} years**
+        """)
+
+    with col2f:
+        st.markdown(f"""
+        **Derived Parameters:**
+        - λ (Real Repayment Rate) = **{lambda_val:.4f}**
+          - = μ + i₀/(e^(i₀Γ) - 1) + π
+          - = {mu:.3f} + {i0:.3f}/(e^({i0:.3f}×{Gamma}) - 1) + {pi:.3f}
+        - κ(M) (Refinancing Cost) = **${kappa:,.0f}**
+        - C(M) = κ(M)/(1-τ) = **${C_M:,.0f}**
+        - ψ = √(2(ρ+λ))/σ = **{psi:.4f}**
+        - φ = 1 + ψ(ρ+λ)C(M)/M = **{phi:.4f}**
+        - x* (Optimal Threshold) = **{x_star:.6f}** ({x_star_bp:.0f} bps)
+        """)
+
+    # Value Matching Calculation
+    st.markdown("---")
+    st.markdown("### 📊 Value Matching Breakdown")
+
+    # Calculate R(0) and R(x*) using the formula from Theorem 2
+    # R(x) = K * e^(-ψx) where K = M * e^(ψx*) / (ψ(ρ+λ))
+    K_constant = M * np.exp(psi * x_star) / (psi * (rho + lambda_val)) if not np.isnan(x_star) else 0
+    R_at_x_star = K_constant * np.exp(-psi * x_star) if not np.isnan(x_star) else 0
+    R_at_0 = K_constant  # R(0) = K * e^0 = K
+
+    # Calculate each term in value matching
+    term_C_M = C_M
+    term_x_star_M = (x_star * M) / (rho + lambda_val) if not np.isnan(x_star) else 0
+
+    col1v, col2v, col3v, col4v = st.columns(4)
+
+    with col1v:
+        st.metric("R(x*)", f"${R_at_x_star:,.0f}", help="Option value at refinancing threshold")
+
+    with col2v:
+        st.metric("R(0)", f"${R_at_0:,.0f}", help="Option value right after refinancing")
+
+    with col3v:
+        st.metric("C(M)", f"${term_C_M:,.0f}", help="Tax-adjusted refinancing cost")
+
+    with col4v:
+        st.metric("x*M/(ρ+λ)", f"${term_x_star_M:,.0f}", help="PV of interest savings")
+
+    # Show the equation verification
+    st.markdown(f"""
+    <div class="formula-box">
+    <b>Verification of Value Matching Condition:</b><br><br>
+    R(x*) = R(0) - C(M) - x*M/(ρ+λ)<br>
+    ${R_at_x_star:,.2f} = ${R_at_0:,.2f} - ${term_C_M:,.2f} - ${term_x_star_M:,.2f}<br>
+    ${R_at_x_star:,.2f} ≈ ${R_at_0 - term_C_M - term_x_star_M:,.2f} ✓<br><br>
+    <b>Interpretation:</b> The value of the refinancing option at the threshold equals the value
+    after refinancing minus the cost minus the PV of interest savings locked in.
+    </div>
+    """, unsafe_allow_html=True)
+
+    # ===========================================
+    # SECTION 2: Net Benefit Analysis Parameters
+    # ===========================================
+    st.markdown("---")
+    st.subheader("🔧 Net Benefit Analysis Parameters")
+
+    col1p, col2p, col3p = st.columns(3)
+
+    with col1p:
+        nb_rate_reduction = st.number_input(
             "Rate Reduction (bps)",
-            min_value=0,
+            min_value=1,
             max_value=500,
-            value=50,
+            value=int(abs(x_star_bp)) if not np.isnan(x_star_bp) else 100,
             step=25,
             help="How much lower is the new rate (in basis points)",
-            key="tab8_rate_reduction"
-        ) / 10000  # Convert bps to decimal
+            key="nb_rate_reduction"
+        ) / 10000
 
-    with col2b:
-        refi_closing_costs = st.number_input(
+        nb_closing_costs = st.number_input(
             "Refinancing Costs ($)",
             min_value=0,
             max_value=50000,
-            value=5000,
+            value=int(kappa),
             step=500,
             help="Total costs to refinance",
-            key="tab8_closing"
+            key="nb_closing"
         )
 
-    with col3b:
-        # Show effective rates
+    with col2p:
+        nb_discount_rate = st.number_input(
+            "PV Discount Rate (%)",
+            min_value=0.0,
+            max_value=15.0,
+            value=rho * 100,
+            step=0.5,
+            help="Discount rate for present value calculations",
+            key="nb_discount"
+        ) / 100
+
+        nb_invest_rate = st.number_input(
+            "Investment Rate (%)",
+            min_value=0.0,
+            max_value=15.0,
+            value=rho * 100,
+            step=0.5,
+            help="Return on invested payment savings",
+            key="nb_invest"
+        ) / 100
+
+    with col3p:
+        nb_new_term = st.number_input(
+            "New Loan Term (years)",
+            min_value=10,
+            max_value=30,
+            value=Gamma,
+            step=5,
+            help="Term of the refinanced loan",
+            key="nb_new_term"
+        )
+
+        nb_include_prepay = st.checkbox(
+            "Include Prepayment Risk (λ)",
+            value=True,
+            help="Account for probability of moving/prepaying",
+            key="nb_prepay"
+        )
+
+    # Display effective rates
+    st.markdown("### 📋 Scenario Summary")
+    col1s, col2s, col3s, col4s = st.columns(4)
+    with col1s:
         st.metric("Original Rate", f"{i0*100:.3f}%")
-        st.metric("New Rate", f"{(i0-rate_reduction)*100:.3f}%")
+    with col2s:
+        st.metric("New Rate", f"{(i0-nb_rate_reduction)*100:.3f}%")
+    with col3s:
+        st.metric("Rate Savings", f"{nb_rate_reduction*10000:.0f} bps")
+    with col4s:
+        st.metric("Closing Costs", f"${nb_closing_costs:,.0f}")
 
-    # Calculate net benefit over time
+    # ===========================================
+    # SECTION 3: Actual Amortization Calculation
+    # ===========================================
     st.markdown("---")
-    st.subheader("💰 Net Benefit Analysis")
+    st.subheader("💰 Net Benefit Analysis (Actual Amortization)")
 
-    # Using the formula without lambda (no prepayment risk) and without discounting
-    # Net Benefit at time t = (x × M × (1-τ)) × t - C
-    # But we need to account for compound interest on savings
+    # Helper function for monthly payment
+    def calc_monthly_payment(principal, annual_rate, months):
+        if annual_rate == 0:
+            return principal / months
+        monthly_rate = annual_rate / 12
+        return principal * monthly_rate / (1 - (1 + monthly_rate)**(-months))
 
-    # Monthly calculations
-    monthly_rate_old = i0 / 12
-    monthly_rate_new = (i0 - rate_reduction) / 12
-    n_months_original = int(Gamma * 12)
-    n_months_analysis = int(analysis_loan_term * 12)
+    # Setup
+    n_months_old = int(Gamma * 12)
+    n_months_new = int(nb_new_term * 12)
+    n_months_analysis = max(n_months_old, n_months_new)
 
-    # Calculate monthly payments
-    def calculate_payment(principal, monthly_rate, n_months):
-        if monthly_rate == 0:
-            return principal / n_months
-        return principal * monthly_rate / (1 - (1 + monthly_rate)**(-n_months))
+    r_old_monthly = i0 / 12
+    r_new_monthly = (i0 - nb_rate_reduction) / 12
+    r_discount_monthly = nb_discount_rate / 12
+    r_invest_monthly = nb_invest_rate / 12
 
-    pmt_old = calculate_payment(M, monthly_rate_old, n_months_original)
-    pmt_new = calculate_payment(M, monthly_rate_new, n_months_original)
+    pmt_old = calc_monthly_payment(M, i0, n_months_old)
+    pmt_new = calc_monthly_payment(M, i0 - nb_rate_reduction, n_months_new)
 
-    # Calculate benefit over time
-    months = []
-    net_benefit_simple = []
-    net_benefit_compound = []
-    cumulative_payment_savings = []
-    cumulative_interest_earnings = []
+    # Build amortization schedules
+    results = []
 
-    savings_balance = 0
-    r_inv_monthly = analysis_invest_rate / 12
+    bal_old = M
+    bal_new = M
+    cumulative_savings_invested = 0
+    cumulative_interest_savings = 0
+    cumulative_pv_savings = 0
+    prepay_survival_prob = 1.0  # Probability of NOT having prepaid yet
 
     for month in range(1, n_months_analysis + 1):
-        months.append(month)
-
-        # Simple formula approach (no compounding)
-        t_years = month / 12
-        simple_benefit = rate_reduction * M * (1 - tau if include_taxes_calc else 1) * t_years
-        if include_closing_costs:
-            simple_benefit -= refi_closing_costs
-        net_benefit_simple.append(simple_benefit)
-
-        # Compound approach (with actual payment differences)
-        if month <= n_months_original:
-            # Calculate interest portions
-            # Remaining balance at this point
-            remaining_old = M
-            remaining_new = M
-
-            for m in range(1, month):
-                int_old = remaining_old * monthly_rate_old
-                prin_old = pmt_old - int_old
-                remaining_old -= prin_old
-
-                int_new = remaining_new * monthly_rate_new
-                prin_new = pmt_new - int_new
-                remaining_new -= prin_new
-
-            int_old = remaining_old * monthly_rate_old
-            int_new = remaining_new * monthly_rate_new
-
-            # Payment difference
-            if include_taxes_calc:
-                after_tax_pmt_old = pmt_old - int_old * tau
-                after_tax_pmt_new = pmt_new - int_new * tau
-                monthly_savings = after_tax_pmt_old - after_tax_pmt_new
-            else:
-                monthly_savings = pmt_old - pmt_new
-
-            # Add to savings with compound interest
-            interest_earned = savings_balance * r_inv_monthly
-            savings_balance = savings_balance * (1 + r_inv_monthly) + monthly_savings
-
-            cumulative_payment_savings.append(savings_balance - interest_earned * month)
-            cumulative_interest_earnings.append(interest_earned * month)
-
-        # Total compound benefit
-        compound_benefit = savings_balance
-        if include_closing_costs:
-            compound_benefit -= refi_closing_costs
-        net_benefit_compound.append(compound_benefit)
-
-    # Create DataFrame for display
-    df_results = pd.DataFrame({
-        'Month': months,
-        'Year': [m/12 for m in months],
-        'Simple Formula Benefit': net_benefit_simple,
-        'Compound Benefit': net_benefit_compound,
-        'Difference': [c - s for c, s in zip(net_benefit_compound, net_benefit_simple)]
-    })
-
-    # Display key metrics
-    col1c, col2c, col3c, col4c = st.columns(4)
-
-    with col1c:
-        st.metric("Monthly Payment Savings", f"${pmt_old - pmt_new:,.2f}")
-
-    with col2c:
-        if include_closing_costs:
-            breakeven_month = next((i for i, b in enumerate(net_benefit_compound) if b > 0), None)
-            if breakeven_month:
-                st.metric("Breakeven Period", f"{breakeven_month} months ({breakeven_month/12:.1f} years)")
-            else:
-                st.metric("Breakeven Period", "Beyond analysis period")
+        # Old loan calculations
+        if month <= n_months_old and bal_old > 0:
+            interest_old = bal_old * r_old_monthly
+            principal_old = pmt_old - interest_old
+            bal_old = max(0, bal_old - principal_old)
+            payment_old = pmt_old
+            tax_benefit_old = interest_old * tau
+            after_tax_payment_old = pmt_old - tax_benefit_old
         else:
-            st.metric("First Year Benefit", f"${net_benefit_compound[11]:,.2f}")
+            interest_old = 0
+            principal_old = 0
+            payment_old = 0
+            tax_benefit_old = 0
+            after_tax_payment_old = 0
 
-    with col3c:
-        final_benefit = net_benefit_compound[-1] if net_benefit_compound else 0
-        st.metric(f"Total Benefit ({analysis_loan_term} years)", f"${final_benefit:,.2f}")
+        # New loan calculations
+        if month <= n_months_new and bal_new > 0:
+            interest_new = bal_new * r_new_monthly
+            principal_new = pmt_new - interest_new
+            bal_new = max(0, bal_new - principal_new)
+            payment_new = pmt_new
+            tax_benefit_new = interest_new * tau
+            after_tax_payment_new = pmt_new - tax_benefit_new
+        else:
+            interest_new = 0
+            principal_new = 0
+            payment_new = 0
+            tax_benefit_new = 0
+            after_tax_payment_new = 0
 
-    with col4c:
-        if include_closing_costs and refi_closing_costs > 0:
-            roi = (final_benefit + refi_closing_costs) / refi_closing_costs - 1
-            st.metric("ROI on Closing Costs", f"{roi:.1%}")
+        # Monthly savings (after tax)
+        monthly_savings = after_tax_payment_old - after_tax_payment_new
+        interest_savings = interest_old - interest_new
 
-    # Charts
+        # Cumulative interest savings (nominal)
+        cumulative_interest_savings += interest_savings
+
+        # Invested savings with compound interest
+        cumulative_savings_invested = cumulative_savings_invested * (1 + r_invest_monthly) + monthly_savings
+
+        # Present value of this month's savings
+        pv_factor = 1 / ((1 + r_discount_monthly) ** month)
+        pv_monthly_savings = monthly_savings * pv_factor
+        cumulative_pv_savings += pv_monthly_savings
+
+        # Prepayment-adjusted calculations (using λ)
+        if nb_include_prepay:
+            # Probability of surviving (not prepaying) through this month
+            lambda_monthly = lambda_val / 12
+            prepay_survival_prob *= (1 - lambda_monthly)
+            expected_savings = monthly_savings * prepay_survival_prob
+        else:
+            expected_savings = monthly_savings
+            prepay_survival_prob = 1.0
+
+        # Net benefit calculations
+        # Future Value (nominal, with investment returns)
+        fv_net_benefit = cumulative_savings_invested - nb_closing_costs
+
+        # Present Value
+        pv_net_benefit = cumulative_pv_savings - nb_closing_costs
+
+        # Paper's formula: Net Benefit = (-x·M·(1-τ))/(ρ+λ) - C(M)
+        # This is the instantaneous/perpetual approximation
+        t_years = month / 12
+        effective_lambda = lambda_val if nb_include_prepay else 0
+
+        # Time-adjusted version of paper's formula
+        # The paper's formula assumes infinite horizon; we adjust for finite time
+        discount_factor = 1 - np.exp(-(rho + effective_lambda) * t_years)
+        paper_formula_benefit = (nb_rate_reduction * M * (1 - tau) / (rho + effective_lambda)) * discount_factor - nb_closing_costs
+
+        results.append({
+            'month': month,
+            'year': month / 12,
+            'payment_old': payment_old,
+            'payment_new': payment_new,
+            'interest_old': interest_old,
+            'interest_new': interest_new,
+            'principal_old': principal_old,
+            'principal_new': principal_new,
+            'balance_old': bal_old,
+            'balance_new': bal_new,
+            'monthly_savings': monthly_savings,
+            'interest_savings': interest_savings,
+            'cumulative_interest_savings': cumulative_interest_savings,
+            'cumulative_savings_invested': cumulative_savings_invested,
+            'fv_net_benefit': fv_net_benefit,
+            'pv_net_benefit': pv_net_benefit,
+            'paper_formula': paper_formula_benefit,
+            'survival_prob': prepay_survival_prob,
+            'expected_savings': expected_savings,
+            'pv_factor': pv_factor
+        })
+
+    df_amort = pd.DataFrame(results)
+
+    # ===========================================
+    # SECTION 4: Key Metrics
+    # ===========================================
+    st.markdown("### 📊 Key Metrics")
+
+    col1m, col2m, col3m, col4m = st.columns(4)
+
+    with col1m:
+        st.metric(
+            "Monthly Payment Savings",
+            f"${pmt_old - pmt_new:,.2f}",
+            help="Difference in nominal monthly payments"
+        )
+
+    with col2m:
+        # Find breakeven month (FV)
+        breakeven_fv = df_amort[df_amort['fv_net_benefit'] >= 0]['month'].min()
+        if pd.notna(breakeven_fv):
+            st.metric("Breakeven (FV)", f"{int(breakeven_fv)} months")
+        else:
+            st.metric("Breakeven (FV)", "Beyond analysis")
+
+    with col3m:
+        # Find breakeven month (PV)
+        breakeven_pv = df_amort[df_amort['pv_net_benefit'] >= 0]['month'].min()
+        if pd.notna(breakeven_pv):
+            st.metric("Breakeven (PV)", f"{int(breakeven_pv)} months")
+        else:
+            st.metric("Breakeven (PV)", "Beyond analysis")
+
+    with col4m:
+        final_fv = df_amort['fv_net_benefit'].iloc[-1]
+        st.metric(f"Total Benefit ({nb_new_term}yr)", f"${final_fv:,.0f}")
+
+    # Paper's formula result
+    st.markdown("### 📐 Paper's Net Benefit Formula")
+
+    # Calculate the paper's infinite-horizon net benefit
+    effective_lambda = lambda_val if nb_include_prepay else 0
+    paper_infinite_benefit = (nb_rate_reduction * M * (1 - tau)) / (rho + effective_lambda) - nb_closing_costs
+
+    st.latex(r"R(x^*) = R(0) - C(M) - \frac{x^* \cdot M}{\rho + \lambda}")
+    st.markdown("**Rearranged as Net Benefit:**")
+    st.latex(r"\text{Net Benefit} = \frac{-x \cdot M \cdot (1-\tau)}{\rho + \lambda} - C(M)")
+
+    col1pf, col2pf = st.columns(2)
+    with col1pf:
+        st.markdown(f"""
+        <div class="formula-box">
+        <b>Your Scenario:</b><br>
+        Net Benefit = (-({-nb_rate_reduction:.4f}) × ${M:,.0f} × (1-{tau:.2f})) / ({rho:.3f} + {effective_lambda:.3f}) - ${nb_closing_costs:,.0f}<br>
+        Net Benefit = ({nb_rate_reduction:.4f} × ${M:,.0f} × {1-tau:.2f}) / {rho + effective_lambda:.3f} - ${nb_closing_costs:,.0f}<br>
+        Net Benefit = ${nb_rate_reduction * M * (1-tau):,.0f} / {rho + effective_lambda:.3f} - ${nb_closing_costs:,.0f}<br>
+        Net Benefit = ${nb_rate_reduction * M * (1-tau) / (rho + effective_lambda):,.0f} - ${nb_closing_costs:,.0f}<br>
+        <b>Net Benefit = ${paper_infinite_benefit:,.0f}</b>
+        </div>
+        """, unsafe_allow_html=True)
+
+    with col2pf:
+        st.markdown(f"""
+        <div class="result-box">
+        <b>Interpretation:</b><br>
+        The paper's formula gives the <b>expected present value</b> of refinancing
+        under the assumption of:
+        <ul>
+        <li>Constant interest savings (interest-only approximation)</li>
+        <li>Infinite horizon (but discounted by ρ+λ)</li>
+        <li>λ captures prepayment risk from moving ({mu*100:.0f}%), inflation ({pi*100:.0f}%), and principal repayment</li>
+        </ul>
+        <br>
+        Your actual benefit will differ due to:<br>
+        • Amortizing loans (declining balance)<br>
+        • Finite loan term<br>
+        • Investment returns on savings
+        </div>
+        """, unsafe_allow_html=True)
+
+    # ===========================================
+    # SECTION 5: Charts
+    # ===========================================
     st.markdown("---")
-    st.subheader("📊 Benefit Accumulation Charts")
+    st.subheader("📈 Net Benefit Charts")
 
-    # Create tabs for different views
-    chart_tab1, chart_tab2, chart_tab3 = st.tabs(["Net Benefit Over Time", "Monthly vs Cumulative", "Comparison"])
+    chart_tab1, chart_tab2, chart_tab3, chart_tab4 = st.tabs([
+        "Net Benefit Over Time",
+        "FV vs PV Comparison",
+        "Amortization Comparison",
+        "Component Breakdown"
+    ])
 
     with chart_tab1:
-        fig = go.Figure()
+        fig1 = go.Figure()
 
-        # Add compound benefit line
-        fig.add_trace(go.Scatter(
-            x=df_results['Year'],
-            y=df_results['Compound Benefit'],
+        # Future Value Net Benefit
+        fig1.add_trace(go.Scatter(
+            x=df_amort['year'],
+            y=df_amort['fv_net_benefit'],
             mode='lines',
-            name='Net Benefit (with compound interest)',
+            name='Net Benefit (FV with investment)',
             line=dict(color='green', width=3)
         ))
 
-        # Add simple formula line
-        fig.add_trace(go.Scatter(
-            x=df_results['Year'],
-            y=df_results['Simple Formula Benefit'],
+        # Present Value Net Benefit
+        fig1.add_trace(go.Scatter(
+            x=df_amort['year'],
+            y=df_amort['pv_net_benefit'],
             mode='lines',
-            name='Simple Formula (no compounding)',
-            line=dict(color='blue', width=2, dash='dot')
+            name=f'Net Benefit (PV @ {nb_discount_rate*100:.1f}%)',
+            line=dict(color='blue', width=3)
         ))
 
-        # Add breakeven line
-        fig.add_hline(y=0, line_dash="dash", line_color="red",
-                     annotation_text="Breakeven")
+        # Paper's time-adjusted formula
+        fig1.add_trace(go.Scatter(
+            x=df_amort['year'],
+            y=df_amort['paper_formula'],
+            mode='lines',
+            name="Paper's Formula (time-adjusted)",
+            line=dict(color='purple', width=2, dash='dash')
+        ))
 
-        fig.update_layout(
-            title="Net Benefit Over Time",
+        # Breakeven line
+        fig1.add_hline(y=0, line_dash="dash", line_color="red",
+                      annotation_text="Breakeven")
+
+        # Paper's infinite horizon value
+        fig1.add_hline(y=paper_infinite_benefit, line_dash="dot", line_color="purple",
+                      annotation_text=f"Paper's Formula (∞): ${paper_infinite_benefit:,.0f}")
+
+        fig1.update_layout(
+            title="Net Benefit Over Time - Actual Amortization vs Paper's Formula",
             xaxis_title="Years",
             yaxis_title="Net Benefit ($)",
             hovermode='x unified',
-            height=500
+            height=600,
+            legend=dict(yanchor="top", y=0.99, xanchor="left", x=0.01)
         )
 
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig1, use_container_width=True)
+
+        st.info("""
+        **Chart Explanation:**
+        - **Green (FV)**: Your actual accumulated savings with investment returns, minus closing costs
+        - **Blue (PV)**: Present value of savings discounted at your discount rate
+        - **Purple dashed**: Paper's formula adjusted for finite time horizon
+        - **Purple dotted**: Paper's infinite horizon value (theoretical maximum)
+
+        The difference between actual and paper's formula comes from:
+        1. Paper assumes interest-only (constant savings); actual loans amortize
+        2. Paper's λ approximates prepayment; actual shows full term
+        3. FV includes investment returns on savings
+        """)
 
     with chart_tab2:
-        # Show monthly savings vs cumulative
         fig2 = go.Figure()
 
-        # Monthly savings (constant)
-        monthly_savings_list = [pmt_old - pmt_new] * len(months)
-        fig2.add_trace(go.Bar(
-            x=[m/12 for m in months],
-            y=monthly_savings_list,
-            name='Monthly Payment Savings',
-            yaxis='y2',
-            opacity=0.3,
-            marker_color='lightblue'
+        # Cumulative savings (no discounting, no investment)
+        cumulative_simple = df_amort['monthly_savings'].cumsum() - nb_closing_costs
+
+        fig2.add_trace(go.Scatter(
+            x=df_amort['year'],
+            y=cumulative_simple,
+            mode='lines',
+            name='Simple Cumulative (no investment)',
+            line=dict(color='gray', width=2, dash='dot')
         ))
 
-        # Cumulative benefit
         fig2.add_trace(go.Scatter(
-            x=df_results['Year'],
-            y=df_results['Compound Benefit'],
+            x=df_amort['year'],
+            y=df_amort['fv_net_benefit'],
             mode='lines',
-            name='Cumulative Net Benefit',
+            name=f'FV (invested @ {nb_invest_rate*100:.1f}%)',
             line=dict(color='green', width=3)
         ))
 
+        fig2.add_trace(go.Scatter(
+            x=df_amort['year'],
+            y=df_amort['pv_net_benefit'],
+            mode='lines',
+            name=f'PV (discounted @ {nb_discount_rate*100:.1f}%)',
+            line=dict(color='blue', width=3)
+        ))
+
+        fig2.add_hline(y=0, line_dash="dash", line_color="red")
+
         fig2.update_layout(
-            title="Monthly Savings and Cumulative Benefit",
+            title="Comparison: Simple vs Invested vs Discounted Net Benefit",
             xaxis_title="Years",
-            yaxis_title="Cumulative Benefit ($)",
-            yaxis2=dict(
-                title="Monthly Savings ($)",
-                overlaying='y',
-                side='right'
-            ),
+            yaxis_title="Net Benefit ($)",
             hovermode='x unified',
             height=500
         )
@@ -2761,87 +2873,228 @@ with tab8:
         st.plotly_chart(fig2, use_container_width=True)
 
     with chart_tab3:
-        # Compare with and without closing costs
         fig3 = go.Figure()
 
-        # With closing costs
+        # Balance comparison
         fig3.add_trace(go.Scatter(
-            x=df_results['Year'],
-            y=df_results['Compound Benefit'],
+            x=df_amort['year'],
+            y=df_amort['balance_old'],
             mode='lines',
-            name='Net Benefit (after closing costs)' if include_closing_costs else 'Net Benefit',
-            line=dict(color='green', width=3)
+            name='Old Loan Balance',
+            line=dict(color='red', width=2)
         ))
 
-        # Without closing costs (gross benefit)
-        gross_benefit = [b + (refi_closing_costs if include_closing_costs else 0) for b in net_benefit_compound]
         fig3.add_trace(go.Scatter(
-            x=df_results['Year'],
-            y=gross_benefit,
+            x=df_amort['year'],
+            y=df_amort['balance_new'],
             mode='lines',
-            name='Gross Benefit (before closing costs)',
-            line=dict(color='blue', width=2, dash='dash')
+            name='New Loan Balance',
+            line=dict(color='green', width=2)
         ))
 
-        # Closing costs line
-        if include_closing_costs:
-            fig3.add_hline(y=-refi_closing_costs, line_dash="dot", line_color="red",
-                          annotation_text=f"Closing Costs: ${refi_closing_costs:,.0f}")
+        # Balance advantage
+        balance_diff = df_amort['balance_old'] - df_amort['balance_new']
+        fig3.add_trace(go.Scatter(
+            x=df_amort['year'],
+            y=balance_diff,
+            mode='lines',
+            name='Balance Advantage (Old - New)',
+            line=dict(color='blue', width=2, dash='dash'),
+            yaxis='y2'
+        ))
 
         fig3.update_layout(
-            title="Net vs Gross Benefit Comparison",
+            title="Loan Balance Comparison",
             xaxis_title="Years",
-            yaxis_title="Benefit ($)",
+            yaxis_title="Balance ($)",
+            yaxis2=dict(
+                title="Balance Difference ($)",
+                overlaying='y',
+                side='right'
+            ),
             hovermode='x unified',
             height=500
         )
 
         st.plotly_chart(fig3, use_container_width=True)
 
-    # Display detailed table
-    st.markdown("---")
-    st.subheader("📋 Detailed Benefit Table")
+    with chart_tab4:
+        fig4 = go.Figure()
 
-    # Show selected years only
-    years_to_show = [1, 2, 3, 5, 10, 15, 20, 25, 30]
-    df_display = df_results[df_results['Year'].isin(years_to_show)].copy()
+        # Interest comparison
+        fig4.add_trace(go.Scatter(
+            x=df_amort['year'],
+            y=df_amort['interest_old'],
+            mode='lines',
+            name='Old Loan Interest',
+            line=dict(color='red', width=2)
+        ))
+
+        fig4.add_trace(go.Scatter(
+            x=df_amort['year'],
+            y=df_amort['interest_new'],
+            mode='lines',
+            name='New Loan Interest',
+            line=dict(color='green', width=2)
+        ))
+
+        fig4.add_trace(go.Scatter(
+            x=df_amort['year'],
+            y=df_amort['interest_savings'],
+            mode='lines',
+            name='Monthly Interest Savings',
+            line=dict(color='blue', width=2),
+            fill='tozeroy',
+            fillcolor='rgba(0,100,255,0.2)'
+        ))
+
+        fig4.update_layout(
+            title="Monthly Interest Comparison",
+            xaxis_title="Years",
+            yaxis_title="Interest ($)",
+            hovermode='x unified',
+            height=500
+        )
+
+        st.plotly_chart(fig4, use_container_width=True)
+
+        st.markdown("""
+        **Note:** Interest savings decrease over time because:
+        1. Both loans are amortizing (balance decreases)
+        2. The old loan has less remaining term
+        3. Eventually the old loan is paid off while the new loan continues
+        """)
+
+    # ===========================================
+    # SECTION 6: Prepayment Risk Analysis
+    # ===========================================
+    if nb_include_prepay:
+        st.markdown("---")
+        st.subheader("📉 Prepayment Risk Analysis")
+
+        st.markdown(f"""
+        The paper models prepayment through **λ = {lambda_val:.4f}**, which includes:
+        - **μ (Moving probability)**: {mu*100:.1f}% annually
+        - **Principal repayment effect**: {i0/(np.exp(i0*Gamma)-1)*100:.2f}% annually
+        - **Inflation erosion (π)**: {pi*100:.1f}% annually
+
+        This means there's a **{(1-np.exp(-lambda_val))*100:.1f}%** chance per year that
+        the refinancing benefit ends (due to moving, etc.).
+        """)
+
+        fig5 = go.Figure()
+
+        fig5.add_trace(go.Scatter(
+            x=df_amort['year'],
+            y=df_amort['survival_prob'] * 100,
+            mode='lines',
+            name='Probability of Still Having Mortgage',
+            line=dict(color='orange', width=3)
+        ))
+
+        fig5.add_hline(y=50, line_dash="dash", line_color="red",
+                      annotation_text="50% probability")
+
+        fig5.update_layout(
+            title="Survival Probability (Not Prepaid)",
+            xaxis_title="Years",
+            yaxis_title="Probability (%)",
+            hovermode='x unified',
+            height=400
+        )
+
+        st.plotly_chart(fig5, use_container_width=True)
+
+        # Expected years until prepayment
+        expected_years = 1 / lambda_val
+        st.metric("Expected Years Until Prepayment", f"{expected_years:.1f} years")
+
+    # ===========================================
+    # SECTION 7: Detailed Table
+    # ===========================================
+    st.markdown("---")
+    st.subheader("📋 Detailed Results Table")
+
+    # Select key periods
+    key_months = [1, 6, 12, 24, 36, 60, 120, 180, 240, 300, 360]
+    key_months = [m for m in key_months if m <= n_months_analysis]
+
+    df_display = df_amort[df_amort['month'].isin(key_months)].copy()
+    df_display['year_display'] = df_display['year'].apply(lambda x: f"{x:.1f}")
+
+    display_cols = {
+        'month': 'Month',
+        'year_display': 'Year',
+        'payment_old': 'Old Payment',
+        'payment_new': 'New Payment',
+        'monthly_savings': 'Monthly Savings',
+        'cumulative_savings_invested': 'Cumul. Savings (FV)',
+        'fv_net_benefit': 'Net Benefit (FV)',
+        'pv_net_benefit': 'Net Benefit (PV)',
+        'paper_formula': "Paper's Formula"
+    }
+
+    df_show = df_display[list(display_cols.keys())].rename(columns=display_cols)
 
     st.dataframe(
-        df_display.style.format({
-            'Month': '{:.0f}',
-            'Year': '{:.0f}',
-            'Simple Formula Benefit': '${:,.2f}',
-            'Compound Benefit': '${:,.2f}',
-            'Difference': '${:,.2f}'
+        df_show.style.format({
+            'Old Payment': '${:,.2f}',
+            'New Payment': '${:,.2f}',
+            'Monthly Savings': '${:,.2f}',
+            'Cumul. Savings (FV)': '${:,.0f}',
+            'Net Benefit (FV)': '${:,.0f}',
+            'Net Benefit (PV)': '${:,.0f}',
+            "Paper's Formula": '${:,.0f}'
         }),
         use_container_width=True
     )
 
-    # Formula explanation
+    # Download button
+    csv = df_amort.to_csv(index=False)
+    st.download_button(
+        label="Download Full Results as CSV",
+        data=csv,
+        file_name="net_benefit_analysis.csv",
+        mime="text/csv"
+    )
+
+    # ===========================================
+    # SECTION 8: Formula Summary
+    # ===========================================
     st.markdown("---")
-    st.subheader("📐 Formula Explanation")
+    st.subheader("📐 Formula Summary")
 
-    st.info(f"""
-    **Simple Formula (without lambda/prepayment):**
-    Net Benefit = (Δr × M × (1-τ) × t) - C
+    st.markdown(f"""
+    ### Key Formulas from the Paper
 
-    Where:
-    - Δr = Rate reduction = {rate_reduction:.4f} ({rate_reduction*10000:.0f} bps)
-    - M = Loan amount = ${M:,.0f}
-    - τ = Tax rate = {tau:.2%} (if included)
-    - t = Time in years
-    - C = Closing costs = ${refi_closing_costs:,.0f} (if included)
+    **1. Lambda (λ) - Expected Real Repayment Rate:**
+    """)
+    st.latex(r"\lambda = \mu + \frac{i_0}{e^{i_0 \Gamma} - 1} + \pi")
+    st.markdown(f"= {mu:.3f} + {i0:.3f}/(e^({i0:.3f}×{Gamma}) - 1) + {pi:.3f} = **{lambda_val:.4f}**")
 
-    **Compound Approach:**
-    - Calculates actual monthly payment difference
-    - Accounts for tax deduction on interest portion only
-    - Compounds savings at investment rate of {analysis_invest_rate:.2%}
-    - More accurate for long-term analysis
+    st.markdown("""
+    **2. Value Matching Condition (Option Value):**
+    """)
+    st.latex(r"R(x^*) = R(0) - C(M) - \frac{x^* M}{\rho + \lambda}")
 
-    **Key Insight:**
-    The difference between simple and compound approaches grows over time due to:
-    1. Investment returns on accumulated savings
-    2. Changing tax benefits as loan amortizes
+    st.markdown("""
+    **3. Net Benefit of Refinancing (Paper's Approximation):**
+    """)
+    st.latex(r"\text{Net Benefit} = \frac{-x \cdot M \cdot (1-\tau)}{\rho + \lambda} - C(M)")
+
+    st.markdown("""
+    **4. Actual Amortization Approach (This Calculator):**
+    - Computes exact monthly principal/interest for both loans
+    - Applies tax deduction to interest portion only
+    - Compounds savings at investment rate
+    - Discounts to present value using discount rate
+    - Optionally adjusts for prepayment probability via λ
+
+    **Why Use Actual Amortization?**
+    - More accurate for comparing real scenarios
+    - Captures declining interest tax benefit over time
+    - Shows exact breakeven timing
+    - Accounts for different loan terms
     """)
 
 
