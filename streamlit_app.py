@@ -3115,6 +3115,17 @@ with tab9:
     """)
 
     # ===========================================
+    # CRITICAL: Ensure x* is NEGATIVE
+    # x* represents (new rate - old rate) which is a DROP, so it must be negative
+    # If x_star from the app is positive, we negate it
+    # ===========================================
+    if not np.isnan(x_star):
+        # Force x* to be negative (it represents a rate DROP)
+        x_star_negative = -abs(x_star)
+    else:
+        x_star_negative = np.nan
+
+    # ===========================================
     # Step 0: Show x* Calculation (KNOWN TO BE CORRECT)
     # ===========================================
     st.subheader("Step 0: x* Calculation (Verified Correct)")
@@ -3191,11 +3202,17 @@ with tab9:
 
     # Compare with stored values
     st.markdown("### Comparison with Stored Values:")
+    st.markdown(f"""
+    **Raw x_star from app:** {x_star:.6f}
+
+    **x_star_negative (forced negative):** {x_star_negative:.6f}
+    """)
+
     col1, col2, col3 = st.columns(3)
     with col1:
         st.metric("Calculated x*", f"{x_star_calc:.6f}")
-        st.metric("Stored x*", f"{x_star:.6f}")
-        st.metric("Difference", f"{abs(x_star_calc - x_star):.10f}")
+        st.metric("Using x* (negative)", f"{x_star_negative:.6f}")
+        st.metric("Difference", f"{abs(x_star_calc - x_star_negative):.10f}")
     with col2:
         st.metric("Calculated psi", f"{psi_calc:.6f}")
         st.metric("Stored psi", f"{psi:.6f}")
@@ -3207,7 +3224,7 @@ with tab9:
 
     # ===========================================
     # Step 1: Verify x* satisfies equation (21)
-    # Using x_star which is NEGATIVE (e.g., -0.0135)
+    # Using x_star_negative which is NEGATIVE (e.g., -0.0135)
     # ===========================================
     st.markdown("---")
     st.subheader("Step 1: Verify x* satisfies equation (21)")
@@ -3220,22 +3237,22 @@ with tab9:
     **Remember: x* is NEGATIVE** (e.g., -0.0135 for a 135 bps rate drop)
     """)
 
-    if not np.isnan(x_star):
-        # x_star is already negative from the calculation
+    if not np.isnan(x_star_negative):
+        # Use x_star_negative which is guaranteed to be negative
         # LHS of equation (21)
-        eq21_LHS = np.exp(psi * x_star) - psi * x_star
+        eq21_LHS = np.exp(psi * x_star_negative) - psi * x_star_negative
 
         # RHS of equation (21)
         eq21_RHS = 1 + (C_M / M) * psi * (rho + lambda_val)
 
         st.markdown(f"""
-        **x* = {x_star:.6f}** (negative, representing a {abs(x_star)*10000:.0f} bps rate drop)
+        **x* = {x_star_negative:.6f}** (negative, representing a {abs(x_star_negative)*10000:.0f} bps rate drop)
 
         **LHS = e^(ψx*) - ψx***
-        = e^({psi:.6f} × {x_star:.6f}) - ({psi:.6f} × {x_star:.6f})
-        = e^({psi * x_star:.6f}) - ({psi * x_star:.6f})
-        = {np.exp(psi * x_star):.6f} - ({psi * x_star:.6f})
-        = {np.exp(psi * x_star):.6f} + {-psi * x_star:.6f}
+        = e^({psi:.6f} × {x_star_negative:.6f}) - ({psi:.6f} × {x_star_negative:.6f})
+        = e^({psi * x_star_negative:.6f}) - ({psi * x_star_negative:.6f})
+        = {np.exp(psi * x_star_negative):.6f} - ({psi * x_star_negative:.6f})
+        = {np.exp(psi * x_star_negative):.6f} + {-psi * x_star_negative:.6f}
         = **{eq21_LHS:.6f}**
 
         **RHS = 1 + (C(M)/M) × ψ × (ρ+λ)**
@@ -3276,36 +3293,36 @@ with tab9:
 
         # K from equation (14) on page 13
         # K = M × e^(ψx*) / (ψ(ρ+λ))
-        K = M * np.exp(psi * x_star) / (psi * (rho + lambda_val))
+        K = M * np.exp(psi * x_star_negative) / (psi * (rho + lambda_val))
 
         st.markdown(f"""
         **K from equation (14):**
         K = M × e^(ψx*) / (ψ(ρ+λ))
-        = {M:,.0f} × e^({psi:.6f} × {x_star:.6f}) / ({psi:.6f} × {rho + lambda_val:.4f})
-        = {M:,.0f} × e^({psi * x_star:.6f}) / {psi * (rho + lambda_val):.6f}
-        = {M:,.0f} × {np.exp(psi * x_star):.6f} / {psi * (rho + lambda_val):.6f}
+        = {M:,.0f} × e^({psi:.6f} × {x_star_negative:.6f}) / ({psi:.6f} × {rho + lambda_val:.4f})
+        = {M:,.0f} × e^({psi * x_star_negative:.6f}) / {psi * (rho + lambda_val):.6f}
+        = {M:,.0f} × {np.exp(psi * x_star_negative):.6f} / {psi * (rho + lambda_val):.6f}
         = **${K:,.2f}**
         """)
 
         # LHS of equation (17): K × e^(-ψx*)
-        eq17_LHS = K * np.exp(-psi * x_star)
+        eq17_LHS = K * np.exp(-psi * x_star_negative)
 
         # RHS of equation (17): K - C(M) - x*M/(ρ+λ)
-        term_xM = (x_star * M) / (rho + lambda_val)
+        term_xM = (x_star_negative * M) / (rho + lambda_val)
         eq17_RHS = K - C_M - term_xM
 
         st.markdown(f"""
         **LHS = K × e^(-ψx*)**
-        = {K:,.2f} × e^(-{psi:.6f} × {x_star:.6f})
-        = {K:,.2f} × e^({-psi * x_star:.6f})
-        = {K:,.2f} × {np.exp(-psi * x_star):.6f}
+        = {K:,.2f} × e^(-{psi:.6f} × {x_star_negative:.6f})
+        = {K:,.2f} × e^({-psi * x_star_negative:.6f})
+        = {K:,.2f} × {np.exp(-psi * x_star_negative):.6f}
         = **${eq17_LHS:,.2f}**
 
         **RHS = K - C(M) - x*M/(ρ+λ)**
 
         First, x*M/(ρ+λ):
-        = {x_star:.6f} × {M:,.0f} / {rho + lambda_val:.4f}
-        = {x_star * M:,.2f} / {rho + lambda_val:.4f}
+        = {x_star_negative:.6f} × {M:,.0f} / {rho + lambda_val:.4f}
+        = {x_star_negative * M:,.2f} / {rho + lambda_val:.4f}
         = **${term_xM:,.2f}** (NEGATIVE because x* is negative)
 
         Now the full RHS:
@@ -3344,7 +3361,7 @@ with tab9:
         """)
 
         R_0 = K  # R(0) = K
-        R_x_star = K * np.exp(-psi * x_star)
+        R_x_star = K * np.exp(-psi * x_star_negative)
 
         col1, col2, col3, col4 = st.columns(4)
         with col1:
@@ -3404,9 +3421,10 @@ with tab9:
         st.markdown(f"""
         | Parameter | Value | Notes |
         |-----------|-------|-------|
-        | x* | {x_star:.6f} | Negative (rate drop) |
-        | x* in bps | {x_star * 10000:.2f} | Negative |
-        | |x*| in bps | {abs(x_star) * 10000:.2f} | Rate drop needed to refinance |
+        | x* (raw from app) | {x_star:.6f} | As stored |
+        | x* (forced negative) | {x_star_negative:.6f} | Used in calculations |
+        | x* in bps | {x_star_negative * 10000:.2f} | Negative |
+        | |x*| in bps | {abs(x_star_negative) * 10000:.2f} | Rate drop needed to refinance |
         | ψ | {psi:.6f} | |
         | φ | {phi:.6f} | |
         | K | ${K:,.2f} | |
@@ -3418,6 +3436,7 @@ with tab9:
 
     else:
         st.error("x* is NaN - cannot verify. Check your input parameters.")
+
 
 
 # Footer
