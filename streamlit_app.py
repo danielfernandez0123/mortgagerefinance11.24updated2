@@ -3100,6 +3100,9 @@ with tab8:
 # Add this to your tab definitions at the top (around line 71):
 # tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9 = st.tabs([...existing tabs..., "Value Matching Debug"])
 
+# Add this to your tab definitions at the top (around line 71):
+# tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9 = st.tabs([...existing tabs..., "Value Matching Debug"])
+
 with tab9:
     st.header("🔍 Value Matching Verification")
 
@@ -3109,11 +3112,103 @@ with tab9:
     """)
 
     # ===========================================
+    # Step 0: Show x* Calculation (KNOWN TO BE CORRECT)
+    # ===========================================
+    st.subheader("Step 0: x* Calculation (Verified Correct)")
+
+    st.markdown("""
+    **From Theorem 2 (page 13), equation (12):**
+    """)
+    st.latex(r"x^* = \frac{1}{\psi} \left[ \phi + W(-e^{-\phi}) \right]")
+
+    st.markdown("""
+    **Where:**
+    """)
+    st.latex(r"\psi = \frac{\sqrt{2(\rho + \lambda)}}{\sigma}")
+    st.latex(r"\phi = 1 + \psi (\rho + \lambda) \frac{\kappa/M}{1-\tau} = 1 + \psi (\rho + \lambda) \frac{C(M)}{M}")
+
+    # Recalculate step by step to show the work
+    st.markdown("### Calculation Steps:")
+
+    # Step 0a: Calculate psi
+    psi_calc = np.sqrt(2 * (rho + lambda_val)) / sigma
+    st.markdown(f"""
+    **ψ = √(2(ρ+λ)) / σ**
+    = √(2 × ({rho:.4f} + {lambda_val:.4f})) / {sigma:.4f}
+    = √(2 × {rho + lambda_val:.4f}) / {sigma:.4f}
+    = √({2 * (rho + lambda_val):.6f}) / {sigma:.4f}
+    = {np.sqrt(2 * (rho + lambda_val)):.6f} / {sigma:.4f}
+    = **{psi_calc:.6f}**
+    """)
+
+    # Step 0b: Calculate C(M)
+    C_M_calc = kappa / (1 - tau)
+    st.markdown(f"""
+    **C(M) = κ / (1-τ)**
+    = {kappa:,.2f} / (1 - {tau:.2f})
+    = {kappa:,.2f} / {1 - tau:.2f}
+    = **${C_M_calc:,.2f}**
+    """)
+
+    # Step 0c: Calculate phi
+    phi_calc = 1 + psi_calc * (rho + lambda_val) * C_M_calc / M
+    st.markdown(f"""
+    **φ = 1 + ψ(ρ+λ)C(M)/M**
+    = 1 + {psi_calc:.6f} × {rho + lambda_val:.4f} × {C_M_calc:,.2f} / {M:,.0f}
+    = 1 + {psi_calc * (rho + lambda_val):.6f} × {C_M_calc / M:.8f}
+    = 1 + {psi_calc * (rho + lambda_val) * C_M_calc / M:.6f}
+    = **{phi_calc:.6f}**
+    """)
+
+    # Step 0d: Calculate Lambert W argument and value
+    w_arg = -np.exp(-phi_calc)
+    w_val = np.real(lambertw(w_arg, k=0))
+    st.markdown(f"""
+    **W argument = -e^(-φ)**
+    = -e^(-{phi_calc:.6f})
+    = -{np.exp(-phi_calc):.10f}
+    = **{w_arg:.10f}**
+
+    **W(-e^(-φ))** = **{w_val:.6f}**
+    """)
+
+    # Step 0e: Calculate x*
+    x_star_calc = (1 / psi_calc) * (phi_calc + w_val)
+    st.markdown(f"""
+    **x* = (1/ψ) × [φ + W(-e^(-φ))]**
+    = (1/{psi_calc:.6f}) × [{phi_calc:.6f} + ({w_val:.6f})]
+    = {1/psi_calc:.6f} × {phi_calc + w_val:.6f}
+    = **{x_star_calc:.6f}**
+
+    **x* in basis points** = {x_star_calc * 10000:.2f} bps
+    **|x*| in basis points** = {abs(x_star_calc) * 10000:.2f} bps (rate drop needed)
+    """)
+
+    # Compare with stored values
+    st.markdown("### Comparison with Stored Values:")
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        st.metric("Calculated x*", f"{x_star_calc:.6f}")
+        st.metric("Stored x*", f"{x_star:.6f}")
+        st.metric("Difference", f"{abs(x_star_calc - x_star):.10f}")
+    with col2:
+        st.metric("Calculated psi", f"{psi_calc:.6f}")
+        st.metric("Stored psi", f"{psi:.6f}")
+        st.metric("Difference", f"{abs(psi_calc - psi):.10f}")
+    with col3:
+        st.metric("Calculated phi", f"{phi_calc:.6f}")
+        st.metric("Stored phi", f"{phi:.6f}")
+        st.metric("Difference", f"{abs(phi_calc - phi):.10f}")
+
+    # ===========================================
     # Step 1: Verify x* satisfies equation (21)
     # ===========================================
+    st.markdown("---")
     st.subheader("Step 1: Verify x* satisfies equation (21)")
 
     st.latex(r"e^{\psi x^*} - \psi x^* = 1 + \frac{C(M)}{M} \psi (\rho + \lambda)")
+
+    st.markdown("This is the implicit equation that x* must satisfy.")
 
     if not np.isnan(x_star):
         # LHS of equation (21)
@@ -3122,18 +3217,32 @@ with tab9:
         # RHS of equation (21)
         eq21_RHS = 1 + (C_M / M) * psi * (rho + lambda_val)
 
+        st.markdown(f"""
+        **LHS = e^(ψx*) - ψx***
+        = e^({psi:.6f} × {x_star:.6f}) - ({psi:.6f} × {x_star:.6f})
+        = e^({psi * x_star:.6f}) - ({psi * x_star:.6f})
+        = {np.exp(psi * x_star):.6f} - ({psi * x_star:.6f})
+        = **{eq21_LHS:.6f}**
+
+        **RHS = 1 + (C(M)/M) × ψ × (ρ+λ)**
+        = 1 + ({C_M:,.2f}/{M:,.0f}) × {psi:.6f} × {rho + lambda_val:.4f}
+        = 1 + {C_M/M:.8f} × {psi:.6f} × {rho + lambda_val:.4f}
+        = 1 + {(C_M/M) * psi * (rho + lambda_val):.6f}
+        = **{eq21_RHS:.6f}**
+        """)
+
         col1, col2, col3 = st.columns(3)
         with col1:
-            st.metric("LHS: e^(ψx*) - ψx*", f"{eq21_LHS:.6f}")
+            st.metric("LHS", f"{eq21_LHS:.6f}")
         with col2:
-            st.metric("RHS: 1 + C(M)/M × ψ(ρ+λ)", f"{eq21_RHS:.6f}")
+            st.metric("RHS", f"{eq21_RHS:.6f}")
         with col3:
             st.metric("Difference", f"{abs(eq21_LHS - eq21_RHS):.8f}")
 
         if abs(eq21_LHS - eq21_RHS) < 0.001:
             st.success("✓ Equation (21) is satisfied!")
         else:
-            st.error("✗ Equation (21) NOT satisfied!")
+            st.error(f"✗ Equation (21) NOT satisfied! Difference: {abs(eq21_LHS - eq21_RHS):.6f}")
 
         # ===========================================
         # Step 2: Verify Value Matching equation (17)
@@ -3144,7 +3253,17 @@ with tab9:
         st.latex(r"K e^{-\psi x^*} = K - C(M) - \frac{x^* M}{\rho + \lambda}")
 
         # K from equation (19) on page 15
-        K = (1/psi) * M * np.exp(psi * x_star) / (rho + lambda_val)
+        # Note: equation (14) says K = M*e^(ψx*) / (ψ(ρ+λ))
+        # equation (19) says K = (1/ψ) * M*e^(ψx*) / (ρ+λ) which is the same thing
+        K = M * np.exp(psi * x_star) / (psi * (rho + lambda_val))
+
+        st.markdown(f"""
+        **K from equation (14):**
+        K = M × e^(ψx*) / (ψ(ρ+λ))
+        = {M:,.0f} × e^({psi:.6f} × {x_star:.6f}) / ({psi:.6f} × {rho + lambda_val:.4f})
+        = {M:,.0f} × {np.exp(psi * x_star):.6f} / {psi * (rho + lambda_val):.6f}
+        = **${K:,.2f}**
+        """)
 
         # LHS of equation (17)
         eq17_LHS = K * np.exp(-psi * x_star)
@@ -3153,126 +3272,63 @@ with tab9:
         eq17_RHS = K - C_M - (x_star * M) / (rho + lambda_val)
 
         st.markdown(f"""
-        **Computing K from equation (19):**
-
-        K = (1/ψ) × M × e^(ψx*) / (ρ+λ)
-        K = (1/{psi:.4f}) × {M:,.0f} × e^({psi:.4f} × {x_star:.6f}) / {rho + lambda_val:.4f}
-        K = (1/{psi:.4f}) × {M:,.0f} × {np.exp(psi * x_star):.6f} / {rho + lambda_val:.4f}
-        **K = ${K:,.2f}**
-        """)
-
-        col1, col2, col3 = st.columns(3)
-        with col1:
-            st.metric("LHS: K × e^(-ψx*)", f"${eq17_LHS:,.2f}")
-        with col2:
-            st.metric("RHS: K - C(M) - x*M/(ρ+λ)", f"${eq17_RHS:,.2f}")
-        with col3:
-            st.metric("Difference", f"${abs(eq17_LHS - eq17_RHS):,.2f}")
-
-        st.markdown(f"""
-        **LHS calculation:**
-        K × e^(-ψx*) = {K:,.2f} × e^(-{psi:.4f} × {x_star:.6f})
+        **LHS = K × e^(-ψx*)**
+        = {K:,.2f} × e^(-{psi:.6f} × {x_star:.6f})
         = {K:,.2f} × e^({-psi * x_star:.6f})
         = {K:,.2f} × {np.exp(-psi * x_star):.6f}
         = **${eq17_LHS:,.2f}**
 
-        **RHS calculation:**
-        K - C(M) - x*M/(ρ+λ)
+        **RHS = K - C(M) - x*M/(ρ+λ)**
         = {K:,.2f} - {C_M:,.2f} - ({x_star:.6f} × {M:,.0f}) / {rho + lambda_val:.4f}
-        = {K:,.2f} - {C_M:,.2f} - ({x_star * M:,.2f}) / {rho + lambda_val:.4f}
+        = {K:,.2f} - {C_M:,.2f} - {x_star * M:,.2f} / {rho + lambda_val:.4f}
         = {K:,.2f} - {C_M:,.2f} - ({(x_star * M) / (rho + lambda_val):,.2f})
         = **${eq17_RHS:,.2f}**
         """)
 
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            st.metric("LHS", f"${eq17_LHS:,.2f}")
+        with col2:
+            st.metric("RHS", f"${eq17_RHS:,.2f}")
+        with col3:
+            st.metric("Difference", f"${abs(eq17_LHS - eq17_RHS):,.2f}")
+
         if abs(eq17_LHS - eq17_RHS) < 1:
             st.success("✓ Value matching equation (17) is satisfied!")
         else:
-            st.error("✗ Value matching equation (17) NOT satisfied!")
+            st.error(f"✗ Value matching equation (17) NOT satisfied!")
 
         # ===========================================
-        # Step 3: Option Values R(0) and R(x*)
+        # Step 3: All Input Parameters
         # ===========================================
         st.markdown("---")
-        st.subheader("Step 3: Option Values")
-
-        st.markdown("""
-        From the paper, **R(x) = K × e^(-ψx)** represents the option value of refinancing.
-        """)
-
-        R_0 = K  # R(0) = K × e^0 = K
-        R_x_star = K * np.exp(-psi * x_star)
-        term_xM = (x_star * M) / (rho + lambda_val)
+        st.subheader("Step 3: All Input Parameters")
 
         col1, col2, col3, col4 = st.columns(4)
         with col1:
-            st.metric("R(0) = K", f"${R_0:,.2f}")
-        with col2:
-            st.metric("R(x*)", f"${R_x_star:,.2f}")
-        with col3:
-            st.metric("C(M)", f"${C_M:,.2f}")
-        with col4:
-            st.metric("x*M/(ρ+λ)", f"${term_xM:,.2f}")
-
-        st.markdown(f"""
-        **Value Matching Equation (page 12):**
-
-        R(x*) = R(0) - C(M) - x*M/(ρ+λ)
-
-        **Check:**
-        - LHS: R(x*) = **${R_x_star:,.2f}**
-        - RHS: R(0) - C(M) - x*M/(ρ+λ) = {R_0:,.2f} - {C_M:,.2f} - ({term_xM:,.2f}) = **${R_0 - C_M - term_xM:,.2f}**
-
-        **Note:** Since x* = {x_star:.6f} is negative, x*M/(ρ+λ) = ${term_xM:,.2f} is also negative.
-        Subtracting a negative means adding: R(0) - C(M) + |x*|M/(ρ+λ)
-        """)
-
-        # ===========================================
-        # Step 4: All Parameters
-        # ===========================================
-        st.markdown("---")
-        st.subheader("Step 4: All Parameters")
-
-        col1, col2, col3, col4 = st.columns(4)
-        with col1:
-            st.markdown("**Threshold**")
-            st.metric("x*", f"{x_star:.6f}")
-            st.metric("x* (bps)", f"{x_star * 10000:.2f}")
-            st.metric("|x*| (bps)", f"{abs(x_star) * 10000:.2f}")
-        with col2:
-            st.markdown("**Greek Letters**")
-            st.metric("ψ (psi)", f"{psi:.6f}")
-            st.metric("φ (phi)", f"{phi:.6f}")
-            st.metric("σ (sigma)", f"{sigma:.6f}")
-        with col3:
-            st.markdown("**Rates**")
-            st.metric("ρ (rho)", f"{rho:.4f}")
-            st.metric("λ (lambda)", f"{lambda_val:.4f}")
-            st.metric("ρ + λ", f"{rho + lambda_val:.4f}")
-        with col4:
-            st.markdown("**Costs**")
+            st.markdown("**Loan Info**")
             st.metric("M (mortgage)", f"${M:,.0f}")
-            st.metric("κ (kappa)", f"${kappa:,.0f}")
-            st.metric("C(M) = κ/(1-τ)", f"${C_M:,.0f}")
-
-        # ===========================================
-        # Step 5: Intermediate Calculations
-        # ===========================================
-        st.markdown("---")
-        st.subheader("Step 5: Intermediate Calculations")
-
-        st.markdown(f"""
-        | Expression | Value |
-        |------------|-------|
-        | ψ = √(2(ρ+λ))/σ | √(2×{rho + lambda_val:.4f})/{sigma:.4f} = {psi:.6f} |
-        | φ = 1 + ψ(ρ+λ)C(M)/M | 1 + {psi:.4f}×{rho + lambda_val:.4f}×{C_M:,.0f}/{M:,.0f} = {phi:.6f} |
-        | e^(ψx*) | e^({psi:.4f}×{x_star:.6f}) = {np.exp(psi * x_star):.6f} |
-        | e^(-ψx*) | e^(-{psi:.4f}×{x_star:.6f}) = {np.exp(-psi * x_star):.6f} |
-        | ψx* | {psi:.4f} × {x_star:.6f} = {psi * x_star:.6f} |
-        | -ψx* | {-psi * x_star:.6f} |
-        """)
+            st.metric("i₀ (original rate)", f"{i0:.4f} ({i0*100:.2f}%)")
+            st.metric("Γ (years remaining)", f"{Gamma}")
+        with col2:
+            st.markdown("**Rates**")
+            st.metric("ρ (discount rate)", f"{rho:.4f} ({rho*100:.1f}%)")
+            st.metric("μ (moving prob)", f"{mu:.4f} ({mu*100:.1f}%)")
+            st.metric("π (inflation)", f"{pi:.4f} ({pi*100:.1f}%)")
+        with col3:
+            st.markdown("**Costs**")
+            st.metric("Points", f"{points:.2f}%")
+            st.metric("Fixed cost", f"${fixed_cost:,.0f}")
+            st.metric("κ (total)", f"${kappa:,.0f}")
+        with col4:
+            st.markdown("**Other**")
+            st.metric("σ (volatility)", f"{sigma:.4f}")
+            st.metric("τ (tax rate)", f"{tau:.2f} ({tau*100:.0f}%)")
+            st.metric("λ (lambda)", f"{lambda_val:.4f}")
 
     else:
         st.error("x* is NaN - cannot verify. Check your input parameters.")
+
 
 
 # Footer
