@@ -3103,6 +3103,9 @@ with tab8:
 # Add this to your tab definitions at the top (around line 71):
 # tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9 = st.tabs([...existing tabs..., "Value Matching Debug"])
 
+# Add this to your tab definitions at the top (around line 71):
+# tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9 = st.tabs([...existing tabs..., "Value Matching Debug"])
+
 with tab9:
     st.header("🔍 Value Matching Verification")
 
@@ -3172,7 +3175,7 @@ with tab9:
     **W(-e^(-φ))** = **{w_val:.6f}**
     """)
 
-    # Step 0e: Calculate x*
+    # Step 0e: Calculate x* - THIS IS NEGATIVE (e.g., -0.0135 for 135 bps drop)
     x_star_calc = (1 / psi_calc) * (phi_calc + w_val)
     st.markdown(f"""
     **x* = (1/ψ) × [φ + W(-e^(-φ))]**
@@ -3180,8 +3183,10 @@ with tab9:
     = {1/psi_calc:.6f} × {phi_calc + w_val:.6f}
     = **{x_star_calc:.6f}**
 
+    **x* is NEGATIVE** because it represents: new rate - old rate < 0 (a rate DROP)
+
     **x* in basis points** = {x_star_calc * 10000:.2f} bps
-    **|x*| in basis points** = {abs(x_star_calc) * 10000:.2f} bps (rate drop needed)
+    **|x*| = rate drop needed** = {abs(x_star_calc) * 10000:.2f} bps
     """)
 
     # Compare with stored values
@@ -3202,15 +3207,21 @@ with tab9:
 
     # ===========================================
     # Step 1: Verify x* satisfies equation (21)
+    # Using x_star which is NEGATIVE (e.g., -0.0135)
     # ===========================================
     st.markdown("---")
     st.subheader("Step 1: Verify x* satisfies equation (21)")
 
     st.latex(r"e^{\psi x^*} - \psi x^* = 1 + \frac{C(M)}{M} \psi (\rho + \lambda)")
 
-    st.markdown("This is the implicit equation that x* must satisfy.")
+    st.markdown("""
+    This is the implicit equation that x* must satisfy.
+
+    **Remember: x* is NEGATIVE** (e.g., -0.0135 for a 135 bps rate drop)
+    """)
 
     if not np.isnan(x_star):
+        # x_star is already negative from the calculation
         # LHS of equation (21)
         eq21_LHS = np.exp(psi * x_star) - psi * x_star
 
@@ -3218,10 +3229,13 @@ with tab9:
         eq21_RHS = 1 + (C_M / M) * psi * (rho + lambda_val)
 
         st.markdown(f"""
+        **x* = {x_star:.6f}** (negative, representing a {abs(x_star)*10000:.0f} bps rate drop)
+
         **LHS = e^(ψx*) - ψx***
         = e^({psi:.6f} × {x_star:.6f}) - ({psi:.6f} × {x_star:.6f})
         = e^({psi * x_star:.6f}) - ({psi * x_star:.6f})
         = {np.exp(psi * x_star):.6f} - ({psi * x_star:.6f})
+        = {np.exp(psi * x_star):.6f} + {-psi * x_star:.6f}
         = **{eq21_LHS:.6f}**
 
         **RHS = 1 + (C(M)/M) × ψ × (ρ+λ)**
@@ -3252,24 +3266,33 @@ with tab9:
 
         st.latex(r"K e^{-\psi x^*} = K - C(M) - \frac{x^* M}{\rho + \lambda}")
 
-        # K from equation (19) on page 15
-        # Note: equation (14) says K = M*e^(ψx*) / (ψ(ρ+λ))
-        # equation (19) says K = (1/ψ) * M*e^(ψx*) / (ρ+λ) which is the same thing
+        st.markdown("""
+        **Remember: x* is NEGATIVE**, so:
+        - ψx* is negative
+        - -ψx* is positive, so e^(-ψx*) > 1
+        - x*M/(ρ+λ) is negative
+        - Subtracting a negative = adding
+        """)
+
+        # K from equation (14) on page 13
+        # K = M × e^(ψx*) / (ψ(ρ+λ))
         K = M * np.exp(psi * x_star) / (psi * (rho + lambda_val))
 
         st.markdown(f"""
         **K from equation (14):**
         K = M × e^(ψx*) / (ψ(ρ+λ))
         = {M:,.0f} × e^({psi:.6f} × {x_star:.6f}) / ({psi:.6f} × {rho + lambda_val:.4f})
+        = {M:,.0f} × e^({psi * x_star:.6f}) / {psi * (rho + lambda_val):.6f}
         = {M:,.0f} × {np.exp(psi * x_star):.6f} / {psi * (rho + lambda_val):.6f}
         = **${K:,.2f}**
         """)
 
-        # LHS of equation (17)
+        # LHS of equation (17): K × e^(-ψx*)
         eq17_LHS = K * np.exp(-psi * x_star)
 
-        # RHS of equation (17)
-        eq17_RHS = K - C_M - (x_star * M) / (rho + lambda_val)
+        # RHS of equation (17): K - C(M) - x*M/(ρ+λ)
+        term_xM = (x_star * M) / (rho + lambda_val)
+        eq17_RHS = K - C_M - term_xM
 
         st.markdown(f"""
         **LHS = K × e^(-ψx*)**
@@ -3279,17 +3302,23 @@ with tab9:
         = **${eq17_LHS:,.2f}**
 
         **RHS = K - C(M) - x*M/(ρ+λ)**
-        = {K:,.2f} - {C_M:,.2f} - ({x_star:.6f} × {M:,.0f}) / {rho + lambda_val:.4f}
-        = {K:,.2f} - {C_M:,.2f} - {x_star * M:,.2f} / {rho + lambda_val:.4f}
-        = {K:,.2f} - {C_M:,.2f} - ({(x_star * M) / (rho + lambda_val):,.2f})
+
+        First, x*M/(ρ+λ):
+        = {x_star:.6f} × {M:,.0f} / {rho + lambda_val:.4f}
+        = {x_star * M:,.2f} / {rho + lambda_val:.4f}
+        = **${term_xM:,.2f}** (NEGATIVE because x* is negative)
+
+        Now the full RHS:
+        = {K:,.2f} - {C_M:,.2f} - ({term_xM:,.2f})
+        = {K:,.2f} - {C_M:,.2f} + {-term_xM:,.2f}
         = **${eq17_RHS:,.2f}**
         """)
 
         col1, col2, col3 = st.columns(3)
         with col1:
-            st.metric("LHS", f"${eq17_LHS:,.2f}")
+            st.metric("LHS: K×e^(-ψx*)", f"${eq17_LHS:,.2f}")
         with col2:
-            st.metric("RHS", f"${eq17_RHS:,.2f}")
+            st.metric("RHS: K-C(M)-x*M/(ρ+λ)", f"${eq17_RHS:,.2f}")
         with col3:
             st.metric("Difference", f"${abs(eq17_LHS - eq17_RHS):,.2f}")
 
@@ -3299,10 +3328,50 @@ with tab9:
             st.error(f"✗ Value matching equation (17) NOT satisfied!")
 
         # ===========================================
-        # Step 3: All Input Parameters
+        # Step 3: Option Values R(0) and R(x*)
         # ===========================================
         st.markdown("---")
-        st.subheader("Step 3: All Input Parameters")
+        st.subheader("Step 3: Option Values R(x)")
+
+        st.markdown("""
+        From the paper (page 13): **R(x) = K × e^(-ψx)** is the option value of refinancing.
+
+        - R(0) = K × e^0 = K
+        - R(x*) = K × e^(-ψx*)
+
+        Since x* is negative, -ψx* is positive, so **R(x*) > R(0)**.
+        This makes sense: the option is more valuable when you're at the threshold.
+        """)
+
+        R_0 = K  # R(0) = K
+        R_x_star = K * np.exp(-psi * x_star)
+
+        col1, col2, col3, col4 = st.columns(4)
+        with col1:
+            st.metric("R(0) = K", f"${R_0:,.2f}")
+        with col2:
+            st.metric("R(x*)", f"${R_x_star:,.2f}")
+        with col3:
+            st.metric("C(M)", f"${C_M:,.2f}")
+        with col4:
+            st.metric("x*M/(ρ+λ)", f"${term_xM:,.2f}")
+
+        st.markdown(f"""
+        **Value Matching Check (page 12):**
+
+        R(x*) = R(0) - C(M) - x*M/(ρ+λ)
+
+        - LHS: R(x*) = **${R_x_star:,.2f}**
+        - RHS: {R_0:,.2f} - {C_M:,.2f} - ({term_xM:,.2f}) = {R_0:,.2f} - {C_M:,.2f} + {-term_xM:,.2f} = **${R_0 - C_M - term_xM:,.2f}**
+
+        **Match: ${R_x_star:,.2f} ≈ ${R_0 - C_M - term_xM:,.2f}** ✓
+        """)
+
+        # ===========================================
+        # Step 4: All Input Parameters
+        # ===========================================
+        st.markdown("---")
+        st.subheader("Step 4: All Input Parameters")
 
         col1, col2, col3, col4 = st.columns(4)
         with col1:
@@ -3326,8 +3395,30 @@ with tab9:
             st.metric("τ (tax rate)", f"{tau:.2f} ({tau*100:.0f}%)")
             st.metric("λ (lambda)", f"{lambda_val:.4f}")
 
+        # ===========================================
+        # Step 5: Summary
+        # ===========================================
+        st.markdown("---")
+        st.subheader("Step 5: Summary")
+
+        st.markdown(f"""
+        | Parameter | Value | Notes |
+        |-----------|-------|-------|
+        | x* | {x_star:.6f} | Negative (rate drop) |
+        | x* in bps | {x_star * 10000:.2f} | Negative |
+        | \|x*\| in bps | {abs(x_star) * 10000:.2f} | Rate drop needed to refinance |
+        | ψ | {psi:.6f} | |
+        | φ | {phi:.6f} | |
+        | K | ${K:,.2f} | |
+        | R(0) | ${R_0:,.2f} | Option value at x=0 |
+        | R(x*) | ${R_x_star:,.2f} | Option value at threshold |
+        | C(M) | ${C_M:,.2f} | Tax-adjusted refi cost |
+        | x*M/(ρ+λ) | ${term_xM:,.2f} | PV of rate savings (negative) |
+        """)
+
     else:
         st.error("x* is NaN - cannot verify. Check your input parameters.")
+
 
 
 
