@@ -3106,6 +3106,13 @@ with tab8:
 # Add this to your tab definitions at the top (around line 71):
 # tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9 = st.tabs([...existing tabs..., "Value Matching Debug"])
 
+# Add this to your tab definitions at the top (around line 71):
+# tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9 = st.tabs([
+#     "📊 Results", "📈 Sensitivity", "🔄 Rate History",
+#     "📉 Amortization", "🏠 Comparison", "💰 Break-Even",
+#     "📋 Summary", "📊 Net Benefit Timeline", "🔍 Value Matching Debug"
+# ])
+
 with tab9:
     st.header("🔍 Value Matching Verification")
 
@@ -3406,7 +3413,7 @@ with tab9:
         |-----------|-------|-------|
         | x* | {x_star:.6f} | Negative (rate drop) |
         | x* in bps | {x_star * 10000:.2f} | Negative |
-        | \|x*\| in bps | {abs(x_star) * 10000:.2f} | Rate drop needed to refinance |
+        | |x*| in bps | {abs(x_star) * 10000:.2f} | Rate drop needed to refinance |
         | ψ | {psi:.6f} | |
         | φ | {phi:.6f} | |
         | K | ${K:,.2f} | |
@@ -3418,6 +3425,7 @@ with tab9:
 
     else:
         st.error("x* is NaN - cannot verify. Check your input parameters.")
+
 
 
 
