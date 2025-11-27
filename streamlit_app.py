@@ -3097,14 +3097,7 @@ with tab8:
     - Accounts for different loan terms
     """)
 
-# Add this to your tab definitions at the top (around line 71):
-# tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9 = st.tabs([...existing tabs..., "Value Matching Debug"])
 
-# Add this to your tab definitions at the top (around line 71):
-# tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9 = st.tabs([...existing tabs..., "Value Matching Debug"])
-
-# Add this to your tab definitions at the top (around line 71):
-# tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9 = st.tabs([...existing tabs..., "Value Matching Debug"])
 
 # Add this to your tab definitions at the top (around line 71):
 # tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9 = st.tabs([
@@ -3425,9 +3418,6 @@ with tab9:
 
     else:
         st.error("x* is NaN - cannot verify. Check your input parameters.")
-
-
-
 
 
 # Footer
